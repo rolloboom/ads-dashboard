@@ -356,7 +356,8 @@ export default function Dashboard() {
             <KpiCard label="Активних"         value={kpiT.active}           color="green"  sub={`з ${kpiT.total} кампаній`} />
             <KpiCard label="Policy проблем"   value={kpiT.pol}              color={kpiT.pol>0?"red":"green"} sub="кампаній" />
             <KpiCard label="Instal"           value={fmtN(totalInstal)}  color="green"  sub="встановлень" />
-            <KpiCard label="DL → Instal %"    value={kpiT.convT>0 ? fmtPct(totalInstal/kpiT.convT*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
+            <KpiCard label="DL → Instal %"    value={kpiT.convT>0 && totalInstal>0 ? fmtPct(totalInstal/kpiT.convT*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
+            <KpiCard label="CPI $"            value={totalInstal>0 && kpiT.spend>0 ? "$"+fmt2(kpiT.spend/totalInstal) : "—"} color={totalInstal>0?"accent":"muted"} sub="ціна інстала" />
             {kpiT.banned>0  && <KpiCard label="🚫 БАН акаунти"   value={kpiT.banned}   color="red"    sub="перевір акаунти" />}
             {kpiT.payIssue>0 && <KpiCard label="💳 Проблема оплати" value={kpiT.payIssue} color="red"  sub="перевір білінг" />}
           </div>
@@ -374,7 +375,8 @@ export default function Dashboard() {
             <KpiCard label="Downloads"      value={fmtN(kpiY.conv)}                          color="yellow" sub="конверсій" />
             <KpiCard label="CPA $"          value={kpiY.cpa>0?"$"+fmt2(kpiY.cpa):"—"}       color="accent" sub="вартість конверсії" />
             <KpiCard label="Instal"         value={fmtN(totalInstal)}                        color="green"  sub="встановлень" />
-            <KpiCard label="DL → Instal %"  value={kpiY.conv>0 ? fmtPct(totalInstal/kpiY.conv*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
+            <KpiCard label="DL → Instal %"  value={kpiY.conv>0 && totalInstal>0 ? fmtPct(totalInstal/kpiY.conv*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
+            <KpiCard label="CPI $"          value={totalInstal>0 && kpiY.spend>0 ? "$"+fmt2(kpiY.spend/totalInstal) : "—"} color={totalInstal>0?"accent":"muted"} sub="ціна інстала" />
             <KpiCard label="Policy проблем" value={kpiY.pol}                                 color={kpiY.pol>0?"red":"green"} sub="кампаній" />
           </div>
         )}
@@ -550,15 +552,18 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   );
 
   // Instal cell — numeric input with OK button
-  const instalVal = parseInt(lbl.instal) || 0;
-  const dlCount   = tab === "yesterday" ? conv : convT;
-  const instalPct = dlCount > 0 && instalVal > 0 ? fmtPct(instalVal / dlCount * 100) : null;
+  const instalVal  = parseInt(lbl.instal) || 0;
+  const dlCount    = tab === "yesterday" ? conv : convT;
+  const spendCount = tab === "yesterday" ? spendY : spendT;
+  const instalPct  = dlCount > 0 && instalVal > 0 ? fmtPct(instalVal / dlCount * 100) : null;
+  const instalCpi  = instalVal > 0 && spendCount > 0 ? fmt2(spendCount / instalVal) : null;
   const instalCell = (
     <td style={{...S.td, minWidth:140}} onClick={e=>e.stopPropagation()}>
       <InstalCell
         value={lbl.instal || ""}
         onSave={v => setLabel(accountId, "instal", v)}
         pct={instalPct}
+        cpi={instalCpi}
       />
     </td>
   );
@@ -794,44 +799,73 @@ function AccStatusCell({ v, p }) {
   );
 }
 
-function InstalCell({ value, onSave, pct }) {
-  const [draft, setDraft] = useState(value);
-  const [saved, setSaved] = useState(true);
+function InstalCell({ value, onSave, pct, cpi }) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState("");
 
-  useEffect(() => { setDraft(value); setSaved(true); }, [value]);
+  const displayVal = parseInt(value) || 0;
 
-  function commit() {
-    const v = draft.trim();
+  function startEdit(e) {
+    e.stopPropagation();
+    setDraft(value || "");
+    setEditing(true);
+  }
+
+  function commit(e) {
+    if (e) e.stopPropagation();
+    const v = String(draft).trim();
     onSave(v);
-    setSaved(true);
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <div style={{display:"flex",flexDirection:"column",gap:3,minWidth:120}} onClick={e=>e.stopPropagation()}>
+        <span
+          onClick={startEdit}
+          title="Клікни щоб редагувати"
+          style={{
+            display:"inline-block", cursor:"text", minWidth:60,
+            color: displayVal > 0 ? "var(--green)" : "var(--border)",
+            fontWeight: displayVal > 0 ? 700 : 400,
+            fontSize: displayVal > 0 ? 15 : 13,
+            borderBottom: displayVal > 0 ? "none" : "1px dashed var(--border)",
+            fontVariantNumeric:"tabular-nums",
+          }}
+        >
+          {displayVal > 0 ? fmtN(displayVal) : "+ instal"}
+        </span>
+        {pct && <span style={{fontSize:11,color:"var(--green)",fontWeight:600}}>{pct} від DL</span>}
+        {cpi && <span style={{fontSize:11,color:"var(--accent)",fontWeight:600}}>CPI ${cpi}</span>}
+      </div>
+    );
   }
 
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:3,minWidth:120}}>
+    <div style={{display:"flex",flexDirection:"column",gap:3,minWidth:120}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",gap:4,alignItems:"center"}}>
         <input
+          autoFocus
           type="number"
           min="0"
           value={draft}
           placeholder="0"
-          onChange={e => { setDraft(e.target.value); setSaved(false); }}
-          onKeyDown={e => { if (e.key==="Enter") commit(); }}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key==="Enter") commit(); if (e.key==="Escape") setEditing(false); }}
+          onBlur={commit}
           style={{
-            background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text)",
+            background:"var(--bg3)", border:"1px solid var(--accent)", color:"var(--text)",
             borderRadius:6, padding:"4px 8px", fontSize:13, outline:"none",
             width:70, fontVariantNumeric:"tabular-nums",
           }}
         />
-        {!saved && (
-          <button
-            onClick={commit}
-            style={{background:"var(--green)",color:"#000",border:"none",borderRadius:6,padding:"4px 10px",fontWeight:700,cursor:"pointer",fontSize:12}}
-          >OK</button>
-        )}
+        <button
+          onMouseDown={e => { e.preventDefault(); commit(e); }}
+          style={{background:"var(--green)",color:"#000",border:"none",borderRadius:6,padding:"4px 10px",fontWeight:700,cursor:"pointer",fontSize:12}}
+        >OK</button>
       </div>
-      {pct && (
-        <span style={{fontSize:11,color:"var(--green)",fontWeight:600}}>{pct} від DL</span>
-      )}
+      {pct && <span style={{fontSize:11,color:"var(--green)",fontWeight:600}}>{pct} від DL</span>}
+      {cpi && <span style={{fontSize:11,color:"var(--accent)",fontWeight:600}}>CPI ${cpi}</span>}
     </div>
   );
 }
