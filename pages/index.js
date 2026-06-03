@@ -734,6 +734,7 @@ export default function Dashboard() {
                   ))}
                   <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Коментар</th>
                   {tab==="yesterday" && <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Instal</th>}
+                  <th style={{...S.th, cursor:"default", width:70}}></th>
                 </tr>
               </thead>
               <tbody>
@@ -806,12 +807,18 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
             ⚠ Перевірити
           </span>
         )}
-        <button
-          onClick={e=>{ e.stopPropagation(); setLabel(accountId,"manualBan","1"); }}
-          title="Перенести в БАН вручну"
-          style={{background:"rgba(239,68,68,.15)",color:"var(--red)",border:"1px solid rgba(239,68,68,.3)",borderRadius:5,padding:"1px 7px",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap",marginLeft:"auto"}}
-        >В БАН</button>
       </div>
+    </td>
+  );
+
+  // Ban button cell (last column, summary rows only)
+  const banCell = (
+    <td style={{...S.td, width:70}} onClick={e=>e.stopPropagation()}>
+      <button
+        onClick={()=>setLabel(accountId,"manualBan","1")}
+        title="Перенести в БАН вручну"
+        style={{background:"rgba(239,68,68,.12)",color:"var(--red)",border:"1px solid rgba(239,68,68,.25)",borderRadius:6,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+      >В БАН</button>
     </td>
   );
 
@@ -872,12 +879,14 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
           <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
           {commentCell}
           {instalCell}
+          {banCell}
         </tr>
         {!collapsed&&rows.map((row,i)=>(
           <tr key={i} style={S.tr}>
             {COLS_YESTERDAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
             <td style={S.td}></td>{/* comment spacer */}
             <td style={S.td}></td>{/* instal spacer */}
+            <td style={S.td}></td>{/* ban spacer */}
           </tr>
         ))}
       </>
@@ -915,11 +924,13 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
         {commentCell}
+        {banCell}
       </tr>
       {!collapsed&&rows.map((row,i)=>(
         <tr key={i} style={S.tr}>
           {COLS_TODAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
           <td style={S.td}></td>{/* comment spacer */}
+          <td style={S.td}></td>{/* ban spacer */}
         </tr>
       ))}
     </>
