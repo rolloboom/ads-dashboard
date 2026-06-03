@@ -65,7 +65,7 @@ export default function Dashboard() {
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
   const [updated,  setUpdated]  = useState(null);
-  const [tab,      setTab]      = useState("today"); // "today" | "yesterday"
+  const [tab,      setTab]      = useState("today"); // "today" | "yesterday" | "week"
   const [collapsed,setCollapsed]= useState(null); // null = collapse all by default
 
   // Custom labels: { [accountId]: { name: string, comment: string } }
@@ -77,6 +77,14 @@ export default function Dashboard() {
     setLabels(prev => {
       const next = { ...prev, [accountId]: { ...(prev[accountId]||{}), [field]: value } };
       localStorage.setItem("ads_labels", JSON.stringify(next));
+      // Persist instal to Google Sheet
+      if (field === "instal") {
+        fetch("/api/instals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: accountId, instal: value }),
+        }).catch(() => {}); // silent fail — localStorage is the fallback
+      }
       return next;
     });
   }, []);
@@ -95,8 +103,9 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const r = await fetch("/api/data");
-      const j = await r.json();
+      const [r, ri] = await Promise.all([fetch("/api/data"), fetch("/api/instals")]);
+      const j  = await r.json();
+      const ji = await ri.json().catch(() => ({}));
       if (j.error) throw new Error(j.error);
       const allRows = j.rows || [];
       setRawRows(allRows);
@@ -107,6 +116,17 @@ export default function Dashboard() {
         if (!map[key] || ts > map[key].ts) map[key] = { row, ts };
       });
       setRows(Object.values(map).map(x => x.row));
+      // Merge sheet instals into labels (sheet wins over localStorage)
+      if (ji.instals && Object.keys(ji.instals).length > 0) {
+        setLabels(prev => {
+          const next = { ...prev };
+          Object.entries(ji.instals).forEach(([key, val]) => {
+            next[key] = { ...(next[key]||{}), instal: val };
+          });
+          localStorage.setItem("ads_labels", JSON.stringify(next));
+          return next;
+        });
+      }
       setUpdated(new Date().toLocaleTimeString("uk-UA"));
     } catch(e) { setError(e.message); }
     finally    { setLoading(false); }
@@ -283,6 +303,72 @@ export default function Dashboard() {
     return result;
   }, [rawRows]);
 
+  // ── 7-day aggregated stats per account
+  const weekGroups = useMemo(() => {
+    const weekAgo = fmtDate(-7);
+    const today   = fmtDate(0);
+    // Latest snapshot per (account, campaign, date)
+    const snap = {};
+    rawRows.forEach(row => {
+      const date = String(row[C.date]).slice(0,10);
+      if (!date || date === "Дата" || date < weekAgo || date > today) return;
+      const key = `${row[C.company]}||${row[C.campaign]}||${date}`;
+      const ts  = `${row[C.date]} ${row[C.time]}`;
+      if (!snap[key] || ts > snap[key].ts) snap[key] = { row, ts };
+    });
+    // Aggregate by account
+    const byAcc = {};
+    Object.values(snap).forEach(({ row }) => {
+      const acc = String(row[C.company] || "—");
+      if (!byAcc[acc]) byAcc[acc] = { name: acc, spend:0, imp:0, clicks:0, conv:0, policyIssues:0, days:new Set(), domain:"", geo:"" };
+      const d = byAcc[acc];
+      d.spend  += n(row[C.spendY]);
+      d.imp    += ni(row[C.impY]);
+      d.clicks += ni(row[C.clicksY]);
+      d.conv   += ni(row[C.conv]);
+      if (ni(row[C.policyN]) > 0) d.policyIssues++;
+      if (!d.domain) d.domain = String(row[C.domain]||"");
+      if (!d.geo)    d.geo    = String(row[C.geo]||"");
+      d.days.add(date);
+    });
+    return Object.values(byAcc).map(d => ({
+      ...d, days: d.days.size,
+      ctr: d.imp>0 ? (d.clicks/d.imp)*100 : 0,
+      cpc: d.clicks>0 ? d.spend/d.clicks : 0,
+      cpm: d.imp>0 ? (d.spend/d.imp)*1000 : 0,
+      cpa: d.conv>0 ? d.spend/d.conv : 0,
+    })).sort((a,b) => b.spend - a.spend);
+  }, [rawRows]);
+
+  const [weekSort, setWeekSort] = useState({ col:"spend", dir:-1 });
+  const weekSorted = useMemo(() => {
+    const { col, dir } = weekSort;
+    const numCols = ["spend","imp","clicks","conv","ctr","cpc","cpm","cpa","days"];
+    return [...weekGroups].sort((a,b) => {
+      const av = numCols.includes(col) ? (a[col]||0) : String(a[col]||"").toLowerCase();
+      const bv = numCols.includes(col) ? (b[col]||0) : String(b[col]||"").toLowerCase();
+      return av < bv ? dir : av > bv ? -dir : 0;
+    });
+  }, [weekGroups, weekSort]);
+
+  const kpiW = useMemo(() => {
+    const spend  = weekGroups.reduce((s,r)=>s+r.spend, 0);
+    const imp    = weekGroups.reduce((s,r)=>s+r.imp,   0);
+    const clicks = weekGroups.reduce((s,r)=>s+r.clicks,0);
+    const conv   = weekGroups.reduce((s,r)=>s+r.conv,  0);
+    const instal = weekGroups.reduce((s,r)=>s+(parseInt(labels[r.name]?.instal)||0), 0);
+    return {
+      spend, imp, clicks, conv, instal,
+      ctr: imp>0?(clicks/imp)*100:0,
+      cpc: clicks>0?spend/clicks:0,
+      cpm: imp>0?(spend/imp)*1000:0,
+      cpa: conv>0?spend/conv:0,
+      cpi: instal>0?spend/instal:0,
+      dl2i: conv>0&&instal>0?(instal/conv)*100:0,
+      avgDay: spend/7,
+    };
+  }, [weekGroups, labels]);
+
   // null means "all collapsed" — resolved lazily when groups are known
   const collapsedSet = useMemo(
     () => collapsed === null ? new Set(groups.map(g=>g.name)) : collapsed,
@@ -344,6 +430,10 @@ export default function Dashboard() {
             📊 Вчора
             <span style={S.tabDate}>{yesterday}</span>
           </button>
+          <button style={{...S.tab, ...(tab==="week"?S.tabActive:{})}} onClick={()=>setTab("week")}>
+            📈 7 днів
+            <span style={S.tabDate}>{fmtDate(-6)} — {fmtDate(0)}</span>
+          </button>
         </div>
 
         {/* KPI — TODAY */}
@@ -378,8 +468,80 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* KPI — WEEK */}
+        {tab==="week" && (<>
+          <div style={S.kpiGrid}>
+            <KpiCard label="Витрати 7 днів"  value={"$"+fmt2(kpiW.spend)}                        color="accent" sub="загалом" />
+            <KpiCard label="Avg / день"      value={"$"+fmt2(kpiW.avgDay)}                       color="purple" sub="середньо на день" />
+            <KpiCard label="Покази"          value={fmtN(kpiW.imp)}                              color="blue"   sub="7 днів" />
+            <KpiCard label="Кліки"           value={fmtN(kpiW.clicks)}                           color="blue"   sub="7 днів" />
+            <KpiCard label="CTR"             value={fmtPct(kpiW.ctr)}                            color={kpiW.ctr>=3?"green":kpiW.ctr>=1?"yellow":"muted"} sub="кліки ÷ покази" />
+            <KpiCard label="CPC $"           value={kpiW.cpc>0?"$"+fmt2(kpiW.cpc):"—"}          color="purple" sub="вартість кліку" />
+            <KpiCard label="Downloads"       value={fmtN(kpiW.conv)}                             color="yellow" sub="7 днів" />
+            <KpiCard label="CPA $"           value={kpiW.cpa>0?"$"+fmt2(kpiW.cpa):"—"}          color="accent" sub="ціна завантаження" />
+            <KpiCard label="Instal"          value={fmtN(kpiW.instal)}                           color="green"  sub="7 днів" />
+            <KpiCard label="DL → Instal %"   value={kpiW.dl2i>0?fmtPct(kpiW.dl2i):"—"}          color={kpiW.instal>0?"green":"muted"} sub="конверсія" />
+            <KpiCard label="CPI $"           value={kpiW.cpi>0?"$"+fmt2(kpiW.cpi):"—"}          color={kpiW.instal>0?"accent":"muted"} sub="ціна інстала" />
+          </div>
+
+          <div style={S.tableWrap}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  {[
+                    {k:"name",    l:"Акаунт"},
+                    {k:"spend",   l:"Витрати $"},
+                    {k:"avgDay",  l:"Avg/день $"},
+                    {k:"imp",     l:"Покази"},
+                    {k:"clicks",  l:"Кліки"},
+                    {k:"ctr",     l:"CTR"},
+                    {k:"cpc",     l:"CPC $"},
+                    {k:"cpm",     l:"CPM $"},
+                    {k:"conv",    l:"Downloads"},
+                    {k:"instal",  l:"Instal"},
+                    {k:"dl2i",    l:"DL→I %"},
+                    {k:"cpi",     l:"CPI $"},
+                    {k:"domain",  l:"Домен"},
+                  ].map(({k,l})=>(
+                    <th key={k} style={S.th} onClick={()=>setWeekSort(s=>({col:k,dir:s.col===k?-s.dir:-1}))}>
+                      <span style={{display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+                        {l}<SortIcon active={weekSort.col===k} dir={weekSort.dir}/>
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {weekSorted.map((g,i)=>{
+                  const instal = parseInt(labels[g.name]?.instal)||0;
+                  const dl2i   = g.conv>0&&instal>0 ? (instal/g.conv)*100 : 0;
+                  const cpi    = instal>0&&g.spend>0 ? g.spend/instal : 0;
+                  return (
+                    <tr key={i} style={S.tr}>
+                      <td style={S.td}><span style={{fontWeight:600}}>{labels[g.name]?.name || g.name}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",fontWeight:700,color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>${fmt2(g.spend)}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(g.spend/7)}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtN(g.imp)}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtN(g.clicks)}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:g.ctr>=3?"var(--green)":g.ctr>=1?"var(--yellow)":"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtPct(g.ctr)}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{g.cpc>0?"$"+fmt2(g.cpc):"—"}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{g.cpm>0?"$"+fmt2(g.cpm):"—"}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:g.conv>0?"var(--yellow)":"var(--muted)",fontWeight:g.conv>0?600:400,fontVariantNumeric:"tabular-nums"}}>{fmtN(g.conv)}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:instal>0?"var(--green)":"var(--muted)",fontWeight:instal>0?700:400,fontVariantNumeric:"tabular-nums"}}>{instal>0?fmtN(instal):"—"}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:dl2i>0?"var(--green)":"var(--muted)",fontVariantNumeric:"tabular-nums"}}>{dl2i>0?fmtPct(dl2i):"—"}</span></td>
+                      <td style={S.td}><span style={{display:"block",textAlign:"right",color:cpi>0?"var(--accent)":"var(--muted)",fontVariantNumeric:"tabular-nums"}}>{cpi>0?"$"+fmt2(cpi):"—"}</span></td>
+                      <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500}}>{g.domain||"—"}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {weekSorted.length===0&&<div style={S.empty}><div style={{fontSize:40,marginBottom:12}}>📊</div><div>Немає даних за останні 7 днів.</div></div>}
+          </div>
+        </>)}
+
         {/* CHART */}
-        {chartData.length>1 && (
+        {tab!=="week" && chartData.length>1 && (
           <div style={S.chartBox}>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:12,fontWeight:600,textTransform:"uppercase",letterSpacing:".5px"}}>
               {tab==="today"?"Витрати сьогодні по днях ($)":"Витрати вчора по днях ($)"}
@@ -388,8 +550,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* FILTERS */}
-        <div style={S.filterBox}>
+        {/* FILTERS — hidden on week tab */}
+        {tab!=="week" && <div style={S.filterBox}>
           <div style={S.filterRow}>
             <FGroup label="Від"><input style={S.inp} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} /></FGroup>
             <FGroup label="До"> <input style={S.inp} type="date" value={dateTo}   onChange={e=>setDateTo(e.target.value)}   /></FGroup>
@@ -431,10 +593,10 @@ export default function Dashboard() {
               <button style={{...S.btn,background:"var(--bg4)",color:"var(--muted2)",border:"1px solid var(--border)"}} onClick={resetFilters}>Скинути</button>
             </FGroup>
           </div>
-        </div>
+        </div>}
 
         {/* RESULTS BAR */}
-        <div style={S.resultsBar}>
+        {tab!=="week" && <div style={S.resultsBar}>
           <span style={{color:"var(--muted)",fontSize:12}}>
             {loading?"Завантаження…":`${filteredForTable.length} кампаній · ${groups.length} акаунтів`}
           </span>
@@ -443,10 +605,10 @@ export default function Dashboard() {
             <button style={S.smallBtn} onClick={collapseAll}>Згорнути всі</button>
             <span style={{color:"var(--muted)",fontSize:11}}>↑↓ клік по заголовку</span>
           </div>
-        </div>
+        </div>}
 
         {/* TABLE */}
-        {groups.length>0 && (
+        {tab!=="week" && groups.length>0 && (
           <div style={S.tableWrap}>
             <table style={S.table}>
               <thead>
