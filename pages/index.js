@@ -373,42 +373,96 @@ export default function Dashboard() {
 }
 
 function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
-  const rows     = group.rows;
-  const spendY   = rows.reduce((s,r)=>s+n(r[C.spendY]),  0);
-  const spendT   = rows.reduce((s,r)=>s+n(r[C.spendT]),  0);
-  const conv     = rows.reduce((s,r)=>s+ni(r[C.conv]),   0);
-  const clicks   = rows.reduce((s,r)=>s+ni(r[C.clicksY]),0);
-  const imp      = rows.reduce((s,r)=>s+ni(r[C.impY]),   0);
-  const active   = rows.filter(r=>String(r[C.status]).includes("крутить")).length;
-  const pol      = rows.filter(r=>ni(r[C.policyN])>0).length;
-  const ctr      = imp>0?(clicks/imp)*100:0;
+  const rows   = group.rows;
+  const spendY = rows.reduce((s,r)=>s+n(r[C.spendY]),   0);
+  const spendT = rows.reduce((s,r)=>s+n(r[C.spendT]),   0);
+  const impY   = rows.reduce((s,r)=>s+ni(r[C.impY]),    0);
+  const impT   = rows.reduce((s,r)=>s+ni(r[C.impT]),    0);
+  const clicks = rows.reduce((s,r)=>s+ni(r[C.clicksY]), 0);
+  const conv   = rows.reduce((s,r)=>s+ni(r[C.conv]),    0);
+  const budget = rows.reduce((s,r)=>s+n(r[C.budget]),   0);
+  const month  = rows.reduce((s,r)=>s+n(r[C.monthSpend]),0);
+  const pol    = rows.filter(r=>ni(r[C.policyN])>0).length;
+  const active = rows.filter(r=>String(r[C.status]).includes("крутить")).length;
+  const ctr    = impY>0?(clicks/impY)*100:0;
+  const cpc    = clicks>0?spendY/clicks:0;
+  const cpm    = impY>0?(spendY/impY)*1000:0;
+  const ctrT   = impT>0?0:0; // today has no clicks data
 
+  // Arrow toggle cell (first col)
+  const arrowCell = (
+    <td style={{...S.td, paddingLeft:14, whiteSpace:"nowrap", cursor:"pointer"}} onClick={onToggle}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s"}}>▼</span>
+        <span style={{fontWeight:700,fontSize:13,color:"var(--text)"}}>{group.name}</span>
+        <span style={{fontSize:11,color:"var(--muted)",marginLeft:2}}>{rows.length} кам.</span>
+      </div>
+    </td>
+  );
+
+  // Summary row for YESTERDAY tab
+  if (tab==="yesterday") {
+    return (
+      <>
+        <tr style={{...S.tr, background:"var(--bg3)", cursor:"pointer"}} onClick={onToggle}>
+          {arrowCell}
+          <td style={S.td}></td>{/* крео */}
+          <td style={S.td}></td>{/* тип */}
+          <td style={S.td}>
+            <span style={{fontSize:11,color:"var(--green)"}}>{active} актив.</span>
+          </td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(budget)}</span></td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",fontWeight:700,color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>${fmt2(spendY)}</span></td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtN(impY)}</span></td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtN(clicks)}</span></td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",fontWeight:600,color:ctr>=3?"var(--green)":ctr>=1?"var(--yellow)":"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtPct(ctr)}</span></td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{cpc>0?"$"+fmt2(cpc):"—"}</span></td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{cpm>0?"$"+fmt2(cpm):"—"}</span></td>
+          <td style={S.td}><span style={{display:"block",textAlign:"right",color:conv>0?"var(--yellow)":"var(--muted)",fontWeight:conv>0?600:400,fontVariantNumeric:"tabular-nums"}}>{fmtN(conv)}</span></td>
+          <td style={S.td}>
+            {pol>0
+              ? <span style={{color:"var(--red)",fontWeight:700}}>⚠ {pol}</span>
+              : <span style={{color:"var(--green)"}}>✓</span>}
+          </td>
+          <td style={S.td}></td>{/* гео */}
+          <td style={S.td}></td>{/* домен */}
+        </tr>
+        {!collapsed&&rows.map((row,i)=>(
+          <tr key={i} style={S.tr}>
+            {COLS_YESTERDAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
+          </tr>
+        ))}
+      </>
+    );
+  }
+
+  // Summary row for TODAY tab
   return (
     <>
-      <tr style={S.groupHeader} onClick={onToggle}>
-        <td colSpan={colCount} style={S.groupHeaderCell}>
-          <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-            <span style={{fontSize:12,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s"}}>▼</span>
-            <span style={{fontWeight:700,fontSize:14,color:"var(--text)"}}>{group.name}</span>
-            <span style={S.gs}>{rows.length} кампаній</span>
-
-            {tab==="yesterday" ? <>
-              <span style={S.gs}><span style={{color:"var(--muted2)"}}>Вчора: </span><span style={{color:"var(--text)",fontWeight:600}}>${fmt2(spendY)}</span></span>
-              <span style={S.gs}><span style={{color:"var(--muted2)"}}>Кліки: </span><span style={{color:"var(--text)",fontWeight:600}}>{fmtN(clicks)}</span></span>
-              <span style={S.gs}><span style={{color:"var(--muted2)"}}>CTR: </span><span style={{color:ctr>=3?"var(--green)":ctr>=1?"var(--yellow)":"var(--muted2)",fontWeight:600}}>{fmtPct(ctr)}</span></span>
-              {conv>0&&<span style={S.gs}><span style={{color:"var(--muted2)"}}>DL: </span><span style={{color:"var(--yellow)",fontWeight:600}}>{fmtN(conv)}</span></span>}
-            </> : <>
-              <span style={S.gs}><span style={{color:"var(--muted2)"}}>Сьогодні: </span><span style={{color:"var(--accent)",fontWeight:600}}>${fmt2(spendT)}</span></span>
-              <span style={S.gs}><span style={{color:"var(--muted2)"}}>Активних: </span><span style={{color:"var(--green)",fontWeight:600}}>{active}</span></span>
-            </>}
-
-            {pol>0&&<span style={{...S.gs,background:"rgba(239,68,68,.12)",color:"var(--red)",padding:"2px 10px",borderRadius:20,fontWeight:700}}>⚠ Policy: {pol}</span>}
-          </div>
+      <tr style={{...S.tr, background:"var(--bg3)", cursor:"pointer"}} onClick={onToggle}>
+        {arrowCell}
+        <td style={S.td}></td>{/* крео */}
+        <td style={S.td}></td>{/* тип */}
+        <td style={S.td}>
+          <span style={{fontSize:11,color:"var(--green)"}}>{active} актив.</span>
         </td>
+        <td style={S.td}>{/* крутить */}</td>
+        <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(budget)}</span></td>
+        <td style={S.td}><span style={{display:"block",textAlign:"right",fontWeight:700,color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>${fmt2(spendT)}</span></td>
+        <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtN(impT)}</span></td>
+        <td style={S.td}>
+          {pol>0
+            ? <span style={{color:"var(--red)",fontWeight:700}}>⚠ {pol}</span>
+            : <span style={{color:"var(--green)"}}>✓</span>}
+        </td>
+        <td style={S.td}></td>{/* крутить попри */}
+        <td style={S.td}></td>{/* гео */}
+        <td style={S.td}></td>{/* домен */}
+        <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
       </tr>
       {!collapsed&&rows.map((row,i)=>(
         <tr key={i} style={S.tr}>
-          {(tab==="yesterday"?COLS_YESTERDAY:COLS_TODAY).map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
+          {COLS_TODAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
         </tr>
       ))}
     </>
