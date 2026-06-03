@@ -9,41 +9,43 @@ const C = {
   geo: 20, domain: 21, monthSpend: 22,
 };
 
-const n   = v => parseFloat(v) || 0;
-const ni  = v => parseInt(v)   || 0;
-const fmt2  = v => n(v).toLocaleString("uk-UA", { minimumFractionDigits:2, maximumFractionDigits:2 });
-const fmt3  = v => n(v).toFixed(3);
-const fmtN  = v => ni(v).toLocaleString("uk-UA");
+const n      = v => parseFloat(v) || 0;
+const ni     = v => parseInt(v)   || 0;
+const fmt2   = v => n(v).toLocaleString("uk-UA", { minimumFractionDigits:2, maximumFractionDigits:2 });
+const fmt3   = v => n(v).toFixed(3);
+const fmtN   = v => ni(v).toLocaleString("uk-UA");
+const fmtPct = v => n(v).toFixed(2) + "%";
 const fmtDate = d => { const dt = new Date(); dt.setDate(dt.getDate()+d); return dt.toISOString().slice(0,10); };
 const unique  = (rows, idx) => [...new Set(rows.map(r=>r[idx]).filter(Boolean))].sort();
 
 const COLS = [
-  { label:"Кампанія",         col:C.campaign,   render: r => <Ellipsis v={r[C.campaign]} w={220} /> },
-  { label:"Крео",             col:C.creo,       render: r => <Ellipsis v={r[C.creo]} w={150} muted /> },
-  { label:"Тип",              col:C.type,       render: r => <Badge v={r[C.type]} color="blue" /> },
-  { label:"Статус",           col:C.status,     render: r => <StatusBadge v={r[C.status]} /> },
-  { label:"Крутить?",         col:C.status,     render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} /> },
-  { label:"Бюджет $",         col:C.budget,     render: r => <Money v={r[C.budget]} /> },
-  { label:"Витр. вчора $",    col:C.spendY,     render: r => <Money v={r[C.spendY]} bold /> },
-  { label:"Витр. сьогодні $", col:C.spendT,     render: r => <Money v={r[C.spendT]} accent /> },
-  { label:"Покази вч.",       col:C.impY,       render: r => <Num v={r[C.impY]} /> },
-  { label:"Покази сьог.",     col:C.impT,       render: r => <Num v={r[C.impT]} /> },
-  { label:"Кліки вч.",        col:C.clicksY,    render: r => <Num v={r[C.clicksY]} /> },
-  { label:"CPC $",            col:C.cpc,        render: r => <Money v={r[C.cpc]} digits={3} /> },
-  { label:"Downloads",        col:C.conv,       render: r => <Num v={r[C.conv]} yellow /> },
-  { label:"Policy",           col:C.policyN,    render: r => <PolicyCell n={r[C.policyN]} d={r[C.policyD]} /> },
-  { label:"Гео",              col:C.geo,        render: r => <Ellipsis v={r[C.geo]} w={160} muted /> },
-  { label:"Домен",            col:C.domain,     render: r => <span style={{color:"var(--blue)",fontWeight:500}}>{r[C.domain]||"—"}</span> },
-  { label:"Місяць $",         col:C.monthSpend, render: r => <Money v={r[C.monthSpend]} /> },
+  { label:"Кампанія",          col:C.campaign,   render: r => <Ellipsis v={r[C.campaign]} w={220} /> },
+  { label:"Крео",              col:C.creo,       render: r => <Ellipsis v={r[C.creo]} w={150} muted /> },
+  { label:"Тип",               col:C.type,       render: r => <Badge v={r[C.type]} color="blue" /> },
+  { label:"Статус",            col:C.status,     render: r => <StatusBadge v={r[C.status]} /> },
+  { label:"Крутить?",          col:C.status,     render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} /> },
+  { label:"Бюджет $",          col:C.budget,     render: r => <Money v={r[C.budget]} /> },
+  { label:"Витр. вчора $",     col:C.spendY,     render: r => <Money v={r[C.spendY]} bold /> },
+  { label:"Витр. сьогодні $",  col:C.spendT,     render: r => <Money v={r[C.spendT]} accent /> },
+  { label:"Покази вч.",        col:C.impY,       render: r => <Num v={r[C.impY]} /> },
+  { label:"Покази сьог.",      col:C.impT,       render: r => <Num v={r[C.impT]} /> },
+  { label:"Кліки вч.",         col:C.clicksY,    render: r => <Num v={r[C.clicksY]} /> },
+  { label:"CTR вч.",           col:C.clicksY,    render: r => <CTRCell clicks={r[C.clicksY]} imp={r[C.impY]} /> },
+  { label:"CPC вч. $",         col:C.cpc,        render: r => <Money v={r[C.cpc]} digits={3} /> },
+  { label:"CPM вч. $",         col:C.spendY,     render: r => <CPMCell spend={r[C.spendY]} imp={r[C.impY]} /> },
+  { label:"Downloads",         col:C.conv,       render: r => <Num v={r[C.conv]} yellow /> },
+  { label:"Policy",            col:C.policyN,    render: r => <PolicyCell n={r[C.policyN]} d={r[C.policyD]} /> },
+  { label:"Гео",               col:C.geo,        render: r => <Ellipsis v={r[C.geo]} w={160} muted /> },
+  { label:"Домен",             col:C.domain,     render: r => <span style={{color:"var(--blue)",fontWeight:500}}>{r[C.domain]||"—"}</span> },
+  { label:"Місяць $",          col:C.monthSpend, render: r => <Money v={r[C.monthSpend]} /> },
 ];
 
 export default function Dashboard() {
-  const [rows,    setRows]    = useState([]);
+  const [rawRows, setRawRows] = useState([]); // all rows for chart
+  const [rows,    setRows]    = useState([]); // deduped for table
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
   const [updated, setUpdated] = useState(null);
-
-  // collapsed accounts: Set of company names
   const [collapsed, setCollapsed] = useState(new Set());
 
   // filters
@@ -56,7 +58,6 @@ export default function Dashboard() {
   const [domain,   setDomain]   = useState("");
   const [search,   setSearch]   = useState("");
 
-  // sorting
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState(-1);
 
@@ -66,9 +67,13 @@ export default function Dashboard() {
       const r = await fetch("/api/data");
       const j = await r.json();
       if (j.error) throw new Error(j.error);
-      // Dedup: keep only the latest row per campaign
+
+      const allRows = j.rows || [];
+      setRawRows(allRows);
+
+      // Dedup for table: latest per campaign
       const map = {};
-      (j.rows || []).forEach(row => {
+      allRows.forEach(row => {
         const key = String(row[C.company]) + "||" + String(row[C.campaign]);
         const ts  = String(row[C.date]) + " " + String(row[C.time]);
         if (!map[key] || ts > map[key].ts) map[key] = { row, ts };
@@ -92,7 +97,6 @@ export default function Dashboard() {
 
   const filtered = useMemo(() => {
     let r = rows;
-    // Always hide ended/removed campaigns
     r = r.filter(x => !String(x[C.status]).includes("Завершена") && !String(x[C.status]).includes("Видалена"));
     if (dateFrom) r = r.filter(x => String(x[C.date]).slice(0,10) >= dateFrom);
     if (dateTo)   r = r.filter(x => String(x[C.date]).slice(0,10) <= dateTo);
@@ -113,55 +117,71 @@ export default function Dashboard() {
     return r;
   }, [rows, dateFrom, dateTo, company, status, typeF, domain, policyF, search]);
 
-  // Group by company, sorted within each group
+  // Chart data: per-day spend from rawRows
+  // For each date+campaign keep only the latest snapshot, then sum by date
+  const chartData = useMemo(() => {
+    const byDateCamp = {};
+    rawRows.forEach(row => {
+      const date = String(row[C.date]).slice(0,10);
+      if (!date || date === "Дата") return;
+      const key = date + "||" + String(row[C.company]) + "||" + String(row[C.campaign]);
+      const ts  = String(row[C.date]) + " " + String(row[C.time]);
+      if (!byDateCamp[key] || ts > byDateCamp[key].ts)
+        byDateCamp[key] = { date, spend: n(row[C.spendY]), ts };
+    });
+    const byDate = {};
+    Object.values(byDateCamp).forEach(({ date, spend }) => {
+      byDate[date] = (byDate[date] || 0) + spend;
+    });
+    return Object.entries(byDate)
+      .sort((a,b) => a[0] < b[0] ? -1 : 1)
+      .slice(-30) // last 30 days
+      .map(([date, spend]) => ({ date, spend }));
+  }, [rawRows]);
+
   const groups = useMemo(() => {
     const map = {};
     filtered.forEach(r => {
-      const key = String(r[C.company] || "—");
+      const key = String(r[C.company]||"—");
       if (!map[key]) map[key] = [];
       map[key].push(r);
     });
-    const sortFn = sortCol !== null ? (a, b) => {
+    const sortFn = sortCol !== null ? (a,b) => {
       let av = a[sortCol], bv = b[sortCol];
       const isNum = [C.budget,C.spendY,C.spendT,C.impY,C.impT,C.clicksY,C.cpc,C.conv,C.policyN,C.monthSpend].includes(sortCol);
       if (isNum) { av = n(av); bv = n(bv); }
       else       { av = String(av||"").toLowerCase(); bv = String(bv||"").toLowerCase(); }
       return av < bv ? sortDir : av > bv ? -sortDir : 0;
     } : null;
-    return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).map(([name, rows]) => ({
-      name,
-      rows: sortFn ? [...rows].sort(sortFn) : rows,
-    }));
+    return Object.entries(map)
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([name, rows]) => ({ name, rows: sortFn ? [...rows].sort(sortFn) : rows }));
   }, [filtered, sortCol, sortDir]);
 
-  // Global KPI
   const kpi = useMemo(() => {
-    const spendY   = filtered.reduce((s,r) => s+n(r[C.spendY]),   0);
-    const spendT   = filtered.reduce((s,r) => s+n(r[C.spendT]),   0);
-    const month    = filtered.reduce((s,r) => s+n(r[C.monthSpend]),0);
-    const downloads= filtered.reduce((s,r) => s+n(r[C.conv]),     0);
-    const clicks   = filtered.reduce((s,r) => s+ni(r[C.clicksY]), 0);
-    const active   = filtered.filter(r => String(r[C.status]).includes("крутить")).length;
-    const polIssue = filtered.filter(r => ni(r[C.policyN]) > 0).length;
-    const cpa      = downloads > 0 ? spendY/downloads : 0;
-    return { spendY, spendT, month, downloads, clicks, active, total:filtered.length, polIssue, cpa };
+    const spendY    = filtered.reduce((s,r) => s+n(r[C.spendY]),   0);
+    const spendT    = filtered.reduce((s,r) => s+n(r[C.spendT]),   0);
+    const month     = filtered.reduce((s,r) => s+n(r[C.monthSpend]),0);
+    const downloads = filtered.reduce((s,r) => s+n(r[C.conv]),     0);
+    const clicks    = filtered.reduce((s,r) => s+ni(r[C.clicksY]), 0);
+    const imps      = filtered.reduce((s,r) => s+ni(r[C.impY]),    0);
+    const active    = filtered.filter(r => String(r[C.status]).includes("крутить")).length;
+    const polIssue  = filtered.filter(r => ni(r[C.policyN]) > 0).length;
+    const cpa       = downloads > 0 ? spendY/downloads : 0;
+    const ctr       = imps > 0 ? (clicks/imps)*100 : 0;
+    const cpm       = imps > 0 ? (spendY/imps)*1000 : 0;
+    return { spendY, spendT, month, downloads, clicks, imps, active, total:filtered.length, polIssue, cpa, ctr, cpm };
   }, [filtered]);
 
   function toggleCollapse(name) {
-    setCollapsed(prev => {
-      const next = new Set(prev);
-      next.has(name) ? next.delete(name) : next.add(name);
-      return next;
-    });
+    setCollapsed(prev => { const s = new Set(prev); s.has(name)?s.delete(name):s.add(name); return s; });
   }
-  function collapseAll()  { setCollapsed(new Set(groups.map(g=>g.name))); }
-  function expandAll()    { setCollapsed(new Set()); }
-
+  function collapseAll() { setCollapsed(new Set(groups.map(g=>g.name))); }
+  function expandAll()   { setCollapsed(new Set()); }
   function handleSort(col) {
-    if (sortCol === col) setSortDir(d => -d);
+    if (sortCol===col) setSortDir(d=>-d);
     else { setSortCol(col); setSortDir(-1); }
   }
-
   function resetFilters() {
     setDateFrom(fmtDate(-7)); setDateTo(fmtDate(0));
     setCompany(""); setStatus(""); setPolicyF(""); setTypeF(""); setDomain(""); setSearch("");
@@ -200,11 +220,22 @@ export default function Dashboard() {
           <KpiCard label="Витрати сьогодні" value={"$"+fmt2(kpi.spendT)}  color="blue"   sub="поточний день" />
           <KpiCard label="Витрати місяця"   value={"$"+fmt2(kpi.month)}   color="purple" sub="цього місяця" />
           <KpiCard label="Активних"         value={kpi.active}            color="green"  sub={`з ${kpi.total} кампаній`} />
+          <KpiCard label="CTR"              value={fmtPct(kpi.ctr)}       color="blue"   sub="кліки ÷ покази" />
+          <KpiCard label="CPM $"            value={"$"+fmt2(kpi.cpm)}     color="purple" sub="вартість 1000 показів" />
           <KpiCard label="Policy проблем"   value={kpi.polIssue}          color={kpi.polIssue>0?"red":"green"} sub="кампаній з проблемами" />
           <KpiCard label="Downloads"        value={fmtN(kpi.downloads)}   color="yellow" sub="конверсій вчора" />
-          <KpiCard label="Кліки вчора"      value={fmtN(kpi.clicks)}      color="blue"   sub="" />
-          <KpiCard label="CPA"              value={kpi.cpa>0?"$"+fmt2(kpi.cpa):"—"} color="accent" sub="вартість конверсії" />
+          <KpiCard label="CPA $"            value={kpi.cpa>0?"$"+fmt2(kpi.cpa):"—"} color="accent" sub="вартість конверсії" />
         </div>
+
+        {/* CHART */}
+        {chartData.length > 1 && (
+          <div style={S.chartBox}>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:12,fontWeight:600,textTransform:"uppercase",letterSpacing:".5px"}}>
+              Витрати по днях ($)
+            </div>
+            <SpendChart data={chartData} />
+          </div>
+        )}
 
         {/* FILTERS */}
         <div style={S.filterBox}>
@@ -243,35 +274,27 @@ export default function Dashboard() {
               </select>
             </FGroup>
             <FGroup label="Пошук">
-              <input
-                style={{...S.inp,minWidth:220}}
-                placeholder="Кампанія, крео, домен…"
-                value={search}
-                onChange={e=>setSearch(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&null}
-              />
+              <input style={{...S.inp,minWidth:220}} placeholder="Кампанія, крео, домен…" value={search} onChange={e=>setSearch(e.target.value)} />
             </FGroup>
             <FGroup label=" ">
-              <button style={{...S.btn,background:"var(--bg4)",color:"var(--muted2)",border:"1px solid var(--border)"}} onClick={resetFilters}>
-                Скинути
-              </button>
+              <button style={{...S.btn,background:"var(--bg4)",color:"var(--muted2)",border:"1px solid var(--border)"}} onClick={resetFilters}>Скинути</button>
             </FGroup>
           </div>
         </div>
 
-        {/* RESULTS + EXPAND/COLLAPSE */}
+        {/* RESULTS BAR */}
         <div style={S.resultsBar}>
           <span style={{color:"var(--muted)",fontSize:12}}>
             {loading ? "Завантаження…" : `${filtered.length} кампаній · ${groups.length} акаунтів`}
           </span>
-          <div style={{display:"flex",gap:8}}>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <button style={S.smallBtn} onClick={expandAll}>Розкрити всі</button>
             <button style={S.smallBtn} onClick={collapseAll}>Згорнути всі</button>
-            <span style={{color:"var(--muted)",fontSize:11,alignSelf:"center"}}>↑↓ клік по заголовку — сортування</span>
+            <span style={{color:"var(--muted)",fontSize:11}}>↑↓ клік по заголовку</span>
           </div>
         </div>
 
-        {/* TABLE HEADER (sticky, shared across all groups) */}
+        {/* TABLE */}
         {groups.length > 0 && (
           <div style={S.tableWrap}>
             <table style={S.table}>
@@ -288,7 +311,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {groups.map(group => (
+                {groups.map(group=>(
                   <AccountGroup
                     key={group.name}
                     group={group}
@@ -299,28 +322,101 @@ export default function Dashboard() {
                 ))}
               </tbody>
             </table>
-
-            {!loading && filtered.length === 0 && (
-              <div style={S.empty}>
-                <div style={{fontSize:40,marginBottom:12}}>🔍</div>
-                <div>Нічого не знайдено. Спробуй змінити фільтри.</div>
-              </div>
+            {!loading && filtered.length===0 && (
+              <div style={S.empty}><div style={{fontSize:40,marginBottom:12}}>🔍</div><div>Нічого не знайдено.</div></div>
             )}
-            {loading && rows.length === 0 && (
-              <div style={S.empty}>
-                <Spinner />
-                <div style={{marginTop:12,color:"var(--muted)"}}>Завантаження даних…</div>
-              </div>
+            {loading && rows.length===0 && (
+              <div style={S.empty}><Spinner /><div style={{marginTop:12,color:"var(--muted)"}}>Завантаження…</div></div>
             )}
           </div>
         )}
-
       </div>
     </>
   );
 }
 
-// ── Account group with collapsible rows
+// ── Spend Chart (SVG)
+function SpendChart({ data }) {
+  const W = 100, H = 120, PAD = { top:10, right:8, bottom:28, left:48 };
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top  - PAD.bottom;
+
+  const maxVal = Math.max(...data.map(d=>d.spend), 0.01);
+  const barW   = innerW / data.length;
+  const gap    = Math.max(1, barW * 0.15);
+
+  // Y axis ticks
+  const ticks = [0, maxVal*0.5, maxVal].map(v => ({
+    y: PAD.top + innerH - (v/maxVal)*innerH,
+    label: "$" + (v >= 1000 ? (v/1000).toFixed(1)+"k" : fmt2(v)),
+  }));
+
+  // Hover tooltip state
+  const [hover, setHover] = useState(null);
+
+  return (
+    <div style={{position:"relative",width:"100%",overflowX:"auto"}}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{width:"100%",minWidth:Math.max(400,data.length*20),height:160,display:"block"}}
+        preserveAspectRatio="none"
+      >
+        {/* Grid lines */}
+        {ticks.map((t,i)=>(
+          <g key={i}>
+            <line x1={PAD.left} y1={t.y} x2={W-PAD.right} y2={t.y}
+              stroke="#1e2535" strokeWidth="0.5" />
+            <text x={PAD.left-2} y={t.y+1} textAnchor="end" fontSize="3.5" fill="#64748b">{t.label}</text>
+          </g>
+        ))}
+
+        {/* Bars */}
+        {data.map((d,i) => {
+          const bh   = Math.max(0.5, (d.spend/maxVal)*innerH);
+          const x    = PAD.left + i*barW + gap/2;
+          const y    = PAD.top + innerH - bh;
+          const isHov= hover===i;
+          return (
+            <g key={i}>
+              <rect
+                x={x} y={y} width={barW-gap} height={bh}
+                fill={isHov ? "var(--accent)" : "rgba(0,229,180,.5)"}
+                rx="0.8"
+                onMouseEnter={()=>setHover(i)}
+                onMouseLeave={()=>setHover(null)}
+                style={{cursor:"pointer",transition:"fill .15s"}}
+              />
+              {/* X label — show every Nth */}
+              {(i % Math.ceil(data.length/10) === 0) && (
+                <text
+                  x={x+(barW-gap)/2} y={H-PAD.bottom+5}
+                  textAnchor="middle" fontSize="3" fill="#64748b"
+                  transform={`rotate(-35,${x+(barW-gap)/2},${H-PAD.bottom+5})`}
+                >
+                  {d.date.slice(5)}
+                </text>
+              )}
+              {/* Hover tooltip */}
+              {isHov && (
+                <g>
+                  <rect x={Math.min(x-8, W-PAD.right-28)} y={y-12} width={28} height={10} rx="1.5" fill="#0f1219" stroke="#1e2535" strokeWidth=".5" />
+                  <text x={Math.min(x-8, W-PAD.right-28)+14} y={y-5} textAnchor="middle" fontSize="3.2" fill="var(--accent)" fontWeight="bold">
+                    ${fmt2(d.spend)}
+                  </text>
+                  <text x={Math.min(x-8, W-PAD.right-28)+14} y={y-1} textAnchor="middle" fontSize="2.5" fill="#64748b">
+                    {d.date.slice(5)}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ── Account group
 function AccountGroup({ group, collapsed, onToggle, colCount }) {
   const rows      = group.rows;
   const spendY    = rows.reduce((s,r)=>s+n(r[C.spendY]),   0);
@@ -328,69 +424,43 @@ function AccountGroup({ group, collapsed, onToggle, colCount }) {
   const conv      = rows.reduce((s,r)=>s+ni(r[C.conv]),    0);
   const active    = rows.filter(r=>String(r[C.status]).includes("крутить")).length;
   const polIssues = rows.filter(r=>ni(r[C.policyN])>0).length;
-  const currency  = rows[0]?.[C.currency] || "$";
 
   return (
     <>
-      {/* Group header row */}
       <tr style={S.groupHeader} onClick={onToggle}>
         <td colSpan={colCount} style={S.groupHeaderCell}>
-          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-            {/* Arrow */}
-            <span style={{fontSize:13,color:"var(--accent)",transition:"transform .2s",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)"}}>▼</span>
-            {/* Account name */}
+          <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+            <span style={{fontSize:12,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s"}}>▼</span>
             <span style={{fontWeight:700,fontSize:14,color:"var(--text)"}}>{group.name}</span>
-            {/* Mini stats */}
-            <span style={S.groupStat}>{rows.length} кампаній</span>
-            <span style={S.groupStat}>
-              <span style={{color:"var(--muted2)"}}>Вчора: </span>
-              <span style={{color:"var(--text)",fontWeight:600}}>${fmt2(spendY)}</span>
-            </span>
-            <span style={S.groupStat}>
-              <span style={{color:"var(--muted2)"}}>Сьогодні: </span>
-              <span style={{color:"var(--accent)",fontWeight:600}}>${fmt2(spendT)}</span>
-            </span>
-            <span style={S.groupStat}>
-              <span style={{color:"var(--muted2)"}}>Активних: </span>
-              <span style={{color:"var(--green)",fontWeight:600}}>{active}</span>
-            </span>
-            {conv > 0 && (
-              <span style={S.groupStat}>
-                <span style={{color:"var(--muted2)"}}>Downloads: </span>
-                <span style={{color:"var(--yellow)",fontWeight:600}}>{fmtN(conv)}</span>
-              </span>
-            )}
-            {polIssues > 0 && (
-              <span style={{...S.groupStat,background:"rgba(239,68,68,.12)",color:"var(--red)",padding:"2px 10px",borderRadius:20,fontWeight:700}}>
-                ⚠ Policy: {polIssues}
-              </span>
-            )}
+            <span style={S.gs}>{rows.length} кампаній</span>
+            <span style={S.gs}><span style={{color:"var(--muted2)"}}>Вчора: </span><span style={{color:"var(--text)",fontWeight:600}}>${fmt2(spendY)}</span></span>
+            <span style={S.gs}><span style={{color:"var(--muted2)"}}>Сьогодні: </span><span style={{color:"var(--accent)",fontWeight:600}}>${fmt2(spendT)}</span></span>
+            <span style={S.gs}><span style={{color:"var(--muted2)"}}>Активних: </span><span style={{color:"var(--green)",fontWeight:600}}>{active}</span></span>
+            {conv>0 && <span style={S.gs}><span style={{color:"var(--muted2)"}}>Downloads: </span><span style={{color:"var(--yellow)",fontWeight:600}}>{fmtN(conv)}</span></span>}
+            {polIssues>0 && <span style={{...S.gs,background:"rgba(239,68,68,.12)",color:"var(--red)",padding:"2px 10px",borderRadius:20,fontWeight:700}}>⚠ Policy: {polIssues}</span>}
           </div>
         </td>
       </tr>
-      {/* Campaign rows */}
-      {!collapsed && rows.map((row, i) => (
+      {!collapsed && rows.map((row,i)=>(
         <tr key={i} style={S.tr}>
-          {COLS.map((c,j) => <td key={j} style={S.td}>{c.render(row)}</td>)}
+          {COLS.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
         </tr>
       ))}
     </>
   );
 }
 
-// ── UI components
-
+// ── UI atoms
 function KpiCard({ label, value, color, sub }) {
   const colors = { accent:"var(--accent)", blue:"var(--blue)", purple:"var(--purple)", red:"var(--red)", yellow:"var(--yellow)", green:"var(--green)" };
   return (
     <div style={S.kpiCard}>
       <div style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".6px",marginBottom:6}}>{label}</div>
-      <div style={{fontSize:28,fontWeight:700,lineHeight:1,color:colors[color]||"var(--text)"}}>{value}</div>
+      <div style={{fontSize:26,fontWeight:700,lineHeight:1,color:colors[color]||"var(--text)"}}>{value}</div>
       {sub && <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>{sub}</div>}
     </div>
   );
 }
-
 function FGroup({ label, children }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -399,53 +469,58 @@ function FGroup({ label, children }) {
     </div>
   );
 }
-
 function Money({ v, bold, accent, digits=2 }) {
   const val = parseFloat(v)||0;
   if (!val) return <span style={{color:"var(--muted)",textAlign:"right",display:"block"}}>—</span>;
-  const color = accent ? "var(--accent)" : bold ? "var(--text)" : "var(--muted2)";
+  const color = accent?"var(--accent)":bold?"var(--text)":"var(--muted2)";
   return <span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color}}>${digits===3?fmt3(val):fmt2(val)}</span>;
 }
-
 function Num({ v, yellow }) {
   const val = parseInt(v)||0;
   if (!val) return <span style={{color:"var(--muted)",textAlign:"right",display:"block"}}>0</span>;
   return <span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:yellow?"var(--yellow)":undefined}}>{fmtN(val)}</span>;
 }
-
+function CTRCell({ clicks, imp }) {
+  const c = ni(clicks), m = ni(imp);
+  if (!m) return <span style={{color:"var(--muted)",textAlign:"right",display:"block"}}>—</span>;
+  const ctr = (c/m)*100;
+  const color = ctr>=3?"var(--green)":ctr>=1?"var(--yellow)":"var(--muted2)";
+  return <span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color}}>{fmtPct(ctr)}</span>;
+}
+function CPMCell({ spend, imp }) {
+  const s = n(spend), m = ni(imp);
+  if (!m||!s) return <span style={{color:"var(--muted)",textAlign:"right",display:"block"}}>—</span>;
+  return <span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>${fmt2((s/m)*1000)}</span>;
+}
 function Ellipsis({ v, w, muted }) {
   const s = String(v||"—");
   return <span title={s} style={{display:"block",maxWidth:w,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:muted?"var(--muted2)":undefined}}>{s}</span>;
 }
-
 function Badge({ v, color }) {
   const bg  = { blue:"rgba(59,130,246,.15)", green:"rgba(16,185,129,.15)", yellow:"rgba(245,158,11,.15)", red:"rgba(239,68,68,.15)", muted:"rgba(100,116,139,.15)" };
   const col = { blue:"var(--blue)", green:"var(--green)", yellow:"var(--yellow)", red:"var(--red)", muted:"var(--muted)" };
   return <span style={{background:bg[color]||bg.muted,color:col[color]||col.muted,padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>{v||"—"}</span>;
 }
-
 function StatusBadge({ v }) {
   const s = String(v||"");
   let color = "muted";
-  if (s.includes("крутить") && !s.includes("обмеж")) color = "green";
-  else if (s.includes("обмежена"))  color = "yellow";
-  else if (s.includes("Призупинено")||s.includes("Видалена")) color = "red";
-  else if (s.includes("модерації")) color = "blue";
+  if (s.includes("крутить")&&!s.includes("обмеж")) color="green";
+  else if (s.includes("обмежена")) color="yellow";
+  else if (s.includes("Призупинено")||s.includes("Видалена")) color="red";
+  else if (s.includes("модерації")) color="blue";
   return <Badge v={s} color={color} />;
 }
-
 function PolicyCell({ n: cnt, d }) {
   const count = parseInt(cnt)||0;
   if (!count) return <span style={{color:"var(--green)"}}>✓ OK</span>;
   const isBad = String(d).includes("Дизапрув");
   return <span title={String(d)} style={{color:isBad?"var(--red)":"var(--yellow)",fontWeight:600,cursor:"help"}}>⚠ {count}</span>;
 }
-
 function ServingCell({ status, policyS, policyN }) {
   const s = String(status||"");
-  if (parseInt(policyN)>0 && String(policyS).includes("ТАК"))
+  if (parseInt(policyN)>0&&String(policyS).includes("ТАК"))
     return <span style={{color:"var(--red)",fontWeight:700}}>🔴 Policy!</span>;
-  if (s.includes("крутить") && !s.includes("обмеж"))
+  if (s.includes("крутить")&&!s.includes("обмеж"))
     return <span style={{color:"var(--green)",fontWeight:600}}>✓ Так</span>;
   if (s.includes("обмежена"))
     return <span style={{color:"var(--yellow)",fontWeight:600}}>⚡ Обмежена</span>;
@@ -455,12 +530,10 @@ function ServingCell({ status, policyS, policyN }) {
     return <span style={{color:"var(--red)"}}>🚫 Стоп</span>;
   return <span style={{color:"var(--muted)"}}>—</span>;
 }
-
 function SortIcon({ active, dir }) {
   if (!active) return <span style={{opacity:.25,fontSize:10}}>↕</span>;
   return <span style={{opacity:1,fontSize:10,color:"var(--accent)"}}>{dir===1?"↑":"↓"}</span>;
 }
-
 function Spinner() {
   return <div style={{width:36,height:36,border:"3px solid var(--bg4)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto"}} />;
 }
@@ -472,8 +545,9 @@ const S = {
   btn:       { background:"var(--accent)", color:"var(--bg)", border:"none", borderRadius:8, padding:"9px 18px", fontWeight:700, cursor:"pointer", fontSize:13 },
   smallBtn:  { background:"var(--bg3)", color:"var(--muted2)", border:"1px solid var(--border)", borderRadius:6, padding:"5px 12px", cursor:"pointer", fontSize:12 },
   errorBox:  { background:"rgba(239,68,68,.1)", border:"1px solid var(--red)", borderRadius:8, padding:"12px 16px", color:"var(--red)", marginBottom:20, fontSize:13 },
-  kpiGrid:   { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))", gap:12, marginBottom:20 },
-  kpiCard:   { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:"var(--r)", padding:"16px 18px" },
+  kpiGrid:   { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:12, marginBottom:20 },
+  kpiCard:   { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:"var(--r)", padding:"14px 16px" },
+  chartBox:  { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:"var(--r)", padding:"16px 20px", marginBottom:20 },
   filterBox: { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:"var(--r)", padding:"16px", marginBottom:16 },
   filterRow: { display:"flex", flexWrap:"wrap", gap:12, alignItems:"flex-end" },
   inp:       { background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text)", borderRadius:7, padding:"7px 10px", fontSize:13, outline:"none", minWidth:140 },
@@ -484,7 +558,7 @@ const S = {
   th:        { background:"#0b0e16", color:"var(--accent)", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", padding:"11px 12px", textAlign:"left", whiteSpace:"nowrap", position:"sticky", top:0, zIndex:2, borderBottom:"1px solid var(--border)", cursor:"pointer" },
   groupHeader:     { cursor:"pointer", userSelect:"none" },
   groupHeaderCell: { background:"var(--bg3)", borderTop:"2px solid var(--border)", borderBottom:"1px solid var(--border)", padding:"11px 14px" },
-  groupStat:       { fontSize:12, color:"var(--muted2)" },
+  gs:              { fontSize:12, color:"var(--muted2)" },
   tr:        { borderBottom:"1px solid var(--border)" },
   td:        { padding:"10px 12px", fontSize:13, verticalAlign:"middle" },
   empty:     { textAlign:"center", padding:"60px 20px", color:"var(--muted)" },
