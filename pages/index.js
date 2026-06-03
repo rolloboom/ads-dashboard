@@ -49,7 +49,15 @@ export default function Dashboard() {
       const r = await fetch("/api/data");
       const j = await r.json();
       if (j.error) throw new Error(j.error);
-      setRows(j.rows || []);
+
+      // Dedup: keep only the latest row per campaign (by date + time)
+      const map = {};
+      (j.rows || []).forEach(row => {
+        const key = String(row[C.company]) + "||" + String(row[C.campaign]);
+        const ts  = String(row[C.date]) + " " + String(row[C.time]);
+        if (!map[key] || ts > map[key].ts) map[key] = { row, ts };
+      });
+      setRows(Object.values(map).map(x => x.row));
       setUpdated(new Date().toLocaleTimeString("uk-UA"));
     } catch (e) {
       setError(e.message);
@@ -59,6 +67,12 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh every hour
+  useEffect(() => {
+    const timer = setInterval(() => load(), 60 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [load]);
 
   // dropdown options
   const companies = useMemo(() => unique(rows, C.company), [rows]);
@@ -154,7 +168,7 @@ export default function Dashboard() {
     { label:"CPC $",         col:C.cpc,       render: r => <Money v={r[C.cpc]} digits={3} /> },
     { label:"Downloads",     col:C.conv,      render: r => <Num v={r[C.conv]} yellow /> },
     { label:"Policy",        col:C.policyN,   render: r => <PolicyCell n={r[C.policyN]} d={r[C.policyD]} s={r[C.policyS]} /> },
-    { label:"Крутить?",      col:C.policyS,   render: r => <ServingCell v={r[C.policyS]} /> },
+    { label:"Крутить?",      col:C.status,    render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} /> },
     { label:"Гео",           col:C.geo,       render: r => <Ellipsis v={r[C.geo]} w={160} muted /> },
     { label:"Домен",         col:C.domain,    render: r => <span style={{color:"var(--blue)",fontWeight:500}}>{r[C.domain]||"—"}</span> },
     { label:"Місяць $",      col:C.monthSpend,render: r => <Money v={r[C.monthSpend]} /> },
@@ -390,11 +404,25 @@ function PolicyCell({ n, d, s }) {
   );
 }
 
-function ServingCell({ v }) {
-  const s = String(v || "");
-  if (!s || s === "—") return <span style={{color:"var(--muted)"}}>—</span>;
-  if (s.includes("ТАК")) return <span style={{color:"var(--red)",fontWeight:700}}>🔴 ТАК</span>;
-  return <span style={{color:"var(--muted)"}}>НІ</span>;
+function ServingCell({ status, policyS, policyN }) {
+  const s = String(status || "");
+  const hasPolicyIssue = parseInt(policyN) > 0;
+  const runningDespitePolicy = String(policyS).includes("ТАК");
+
+  // Running despite policy ban — critical alert
+  if (hasPolicyIssue && runningDespitePolicy)
+    return <span style={{color:"var(--red)",fontWeight:700}}>🔴 Policy!</span>;
+
+  // Normal serving status
+  if (s.includes("крутить") && !s.includes("обмеж"))
+    return <span style={{color:"var(--green)",fontWeight:600}}>✓ Так</span>;
+  if (s.includes("обмежена"))
+    return <span style={{color:"var(--yellow)",fontWeight:600}}>⚡ Обмежена</span>;
+  if (s.includes("Пауза"))
+    return <span style={{color:"var(--muted)"}}>⏸ Пауза</span>;
+  if (s.includes("Призупинено"))
+    return <span style={{color:"var(--red)"}}>🚫 Стоп</span>;
+  return <span style={{color:"var(--muted)"}}>—</span>;
 }
 
 function SortIcon({ active, dir }) {
