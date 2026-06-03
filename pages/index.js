@@ -327,7 +327,7 @@ export default function Dashboard() {
       if (ni(row[C.policyN]) > 0) d.policyIssues++;
       if (!d.domain) d.domain = String(row[C.domain]||"");
       if (!d.geo)    d.geo    = String(row[C.geo]||"");
-      d.days.add(date);
+      d.days.add(String(row[C.date]).slice(0,10));
     });
     return Object.values(byAcc).map(d => ({
       ...d, days: d.days.size,
