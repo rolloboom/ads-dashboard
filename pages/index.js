@@ -233,6 +233,11 @@ export default function Dashboard() {
     return { spend, imp, convT, month, pol, active, paused, banned, payIssue, total: filtered.length };
   }, [filtered]);
 
+  // Total instal from labels (manual input per account)
+  const totalInstal = useMemo(() => {
+    return groups.reduce((sum, g) => sum + (parseInt(labels[g.name]?.instal) || 0), 0);
+  }, [groups, labels]);
+
   // Chart data
   const chartData = useMemo(() => {
     const byDC = {};
@@ -350,6 +355,8 @@ export default function Dashboard() {
             <KpiCard label="Витрати місяця"   value={"$"+fmt2(kpiT.month)}  color="purple" sub="цього місяця" />
             <KpiCard label="Активних"         value={kpiT.active}           color="green"  sub={`з ${kpiT.total} кампаній`} />
             <KpiCard label="Policy проблем"   value={kpiT.pol}              color={kpiT.pol>0?"red":"green"} sub="кампаній" />
+            <KpiCard label="Instal"           value={fmtN(totalInstal)}  color="green"  sub="встановлень" />
+            <KpiCard label="DL → Instal %"    value={kpiT.convT>0 ? fmtPct(totalInstal/kpiT.convT*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
             {kpiT.banned>0  && <KpiCard label="🚫 БАН акаунти"   value={kpiT.banned}   color="red"    sub="перевір акаунти" />}
             {kpiT.payIssue>0 && <KpiCard label="💳 Проблема оплати" value={kpiT.payIssue} color="red"  sub="перевір білінг" />}
           </div>
@@ -366,6 +373,8 @@ export default function Dashboard() {
             <KpiCard label="CPM $"          value={kpiY.cpm>0?"$"+fmt2(kpiY.cpm):"—"}       color="purple" sub="вартість 1000 показів" />
             <KpiCard label="Downloads"      value={fmtN(kpiY.conv)}                          color="yellow" sub="конверсій" />
             <KpiCard label="CPA $"          value={kpiY.cpa>0?"$"+fmt2(kpiY.cpa):"—"}       color="accent" sub="вартість конверсії" />
+            <KpiCard label="Instal"         value={fmtN(totalInstal)}                        color="green"  sub="встановлень" />
+            <KpiCard label="DL → Instal %"  value={kpiY.conv>0 ? fmtPct(totalInstal/kpiY.conv*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
             <KpiCard label="Policy проблем" value={kpiY.pol}                                 color={kpiY.pol>0?"red":"green"} sub="кампаній" />
           </div>
         )}
@@ -451,6 +460,7 @@ export default function Dashboard() {
                     </th>
                   ))}
                   <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Коментар</th>
+                  <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Instal</th>
                 </tr>
               </thead>
               <tbody>
@@ -527,7 +537,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
     </td>
   );
 
-  // Comment cell (last column)
+  // Comment cell
   const commentCell = (
     <td style={{...S.td, minWidth:180}} onClick={e=>e.stopPropagation()}>
       <EditableCell
@@ -535,6 +545,20 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
         placeholder="+ коментар…"
         onSave={v => setLabel(accountId, "comment", v)}
         muted
+      />
+    </td>
+  );
+
+  // Instal cell — numeric input with OK button
+  const instalVal = parseInt(lbl.instal) || 0;
+  const dlCount   = tab === "yesterday" ? conv : convT;
+  const instalPct = dlCount > 0 && instalVal > 0 ? fmtPct(instalVal / dlCount * 100) : null;
+  const instalCell = (
+    <td style={{...S.td, minWidth:140}} onClick={e=>e.stopPropagation()}>
+      <InstalCell
+        value={lbl.instal || ""}
+        onSave={v => setLabel(accountId, "instal", v)}
+        pct={instalPct}
       />
     </td>
   );
@@ -568,11 +592,13 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
           <td style={S.td}><span style={{color:"var(--muted2)",fontSize:12}}>{geoVal}</span></td>
           <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
           {commentCell}
+          {instalCell}
         </tr>
         {!collapsed&&rows.map((row,i)=>(
           <tr key={i} style={S.tr}>
             {COLS_YESTERDAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
             <td style={S.td}></td>{/* comment spacer */}
+            <td style={S.td}></td>{/* instal spacer */}
           </tr>
         ))}
       </>
@@ -610,11 +636,13 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
         {commentCell}
+        {instalCell}
       </tr>
       {!collapsed&&rows.map((row,i)=>(
         <tr key={i} style={S.tr}>
           {COLS_TODAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
-            <td style={S.td}></td>{/* comment spacer */}
+          <td style={S.td}></td>{/* comment spacer */}
+          <td style={S.td}></td>{/* instal spacer */}
         </tr>
       ))}
     </>
@@ -762,6 +790,48 @@ function AccStatusCell({ v, p }) {
     <div style={{display:"flex",flexDirection:"column",gap:2}}>
       {isBan && <span style={{color:"var(--red)",fontWeight:700,fontSize:11}}>🚫 {acc}</span>}
       {isPay && <span style={{color:"var(--yellow)",fontWeight:600,fontSize:11}}>💳 {pay}</span>}
+    </div>
+  );
+}
+
+function InstalCell({ value, onSave, pct }) {
+  const [draft, setDraft] = useState(value);
+  const [saved, setSaved] = useState(true);
+
+  useEffect(() => { setDraft(value); setSaved(true); }, [value]);
+
+  function commit() {
+    const v = draft.trim();
+    onSave(v);
+    setSaved(true);
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:3,minWidth:120}}>
+      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+        <input
+          type="number"
+          min="0"
+          value={draft}
+          placeholder="0"
+          onChange={e => { setDraft(e.target.value); setSaved(false); }}
+          onKeyDown={e => { if (e.key==="Enter") commit(); }}
+          style={{
+            background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text)",
+            borderRadius:6, padding:"4px 8px", fontSize:13, outline:"none",
+            width:70, fontVariantNumeric:"tabular-nums",
+          }}
+        />
+        {!saved && (
+          <button
+            onClick={commit}
+            style={{background:"var(--green)",color:"#000",border:"none",borderRadius:6,padding:"4px 10px",fontWeight:700,cursor:"pointer",fontSize:12}}
+          >OK</button>
+        )}
+      </div>
+      {pct && (
+        <span style={{fontSize:11,color:"var(--green)",fontWeight:600}}>{pct} від DL</span>
+      )}
     </div>
   );
 }
