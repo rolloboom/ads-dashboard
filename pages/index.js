@@ -325,27 +325,36 @@ export default function Dashboard() {
     return result;
   }, [rawRows]);
 
-  // ── Banned accounts (2+ days without data) — last known snapshot
+  // ── Banned accounts: auto (48h+ no data) OR manually banned
   const bannedGroups = useMemo(() => {
-    const bannedSet = new Set(Object.entries(accountStatus).filter(([,v])=>v==="banned").map(([k])=>k));
-    if (bannedSet.size === 0) return [];
+    const autoBanned   = new Set(Object.entries(accountStatus).filter(([,v])=>v==="banned").map(([k])=>k));
+    const manualBanned = new Set(Object.keys(labels).filter(k=>labels[k]?.manualBan==="1"));
+    const allBanned    = new Set([...autoBanned, ...manualBanned]);
+    if (allBanned.size === 0) return [];
+
     const latest = {};
     rawRows.forEach(row => {
       const company = String(row[C.company]);
-      if (!bannedSet.has(company)) return;
+      if (!allBanned.has(company)) return;
       const dateStr = String(row[C.date]).slice(0,10);
       const timeStr = String(row[C.time]||"00:00:00");
       const ts = new Date(dateStr+"T"+timeStr).getTime();
       if (isNaN(ts)) return;
       if (!latest[company] || ts > latest[company].ts) latest[company] = { row, ts };
     });
+    // Include manual bans even if no rows found
+    manualBanned.forEach(company => {
+      if (!latest[company]) latest[company] = { row: [], ts: 0 };
+    });
+
     return Object.entries(latest).map(([company, {row, ts}]) => ({
       company,
-      lastSeen: new Date(ts).toLocaleString("uk-UA"),
+      lastSeen: ts > 0 ? new Date(ts).toLocaleString("uk-UA") : "—",
       lastTs: ts,
       row,
+      isManual: manualBanned.has(company),
     })).sort((a,b) => b.lastTs - a.lastTs);
-  }, [rawRows, accountStatus]);
+  }, [rawRows, accountStatus, labels]);
 
   // ── 7-day aggregated stats per account
   const weekGroups = useMemo(() => {
@@ -610,12 +619,18 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bannedGroups.map(({company, lastSeen, row})=>(
+                    {bannedGroups.map(({company, lastSeen, row, isManual})=>(
                       <tr key={company} style={{...S.tr, background:"rgba(239,68,68,.06)"}}>
                         <td style={S.td}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:"var(--red)",boxShadow:"0 0 5px var(--red)",flexShrink:0}}/>
                             <span style={{fontWeight:700,color:"var(--red)"}}>{labels[company]?.name||company}</span>
+                            {isManual && <span style={{background:"rgba(239,68,68,.2)",color:"var(--red)",fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:20}}>вручну</span>}
+                            <button
+                              onClick={()=>setLabel(company,"manualBan","")}
+                              title="Повернути в основну таблицю"
+                              style={{background:"rgba(16,185,129,.15)",color:"var(--green)",border:"1px solid rgba(16,185,129,.3)",borderRadius:5,padding:"1px 7px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+                            >↩ Розбанити</button>
                           </div>
                         </td>
                         <td style={S.td}><span style={{color:"var(--muted)",fontSize:12}}>{lastSeen}</span></td>
@@ -722,7 +737,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {groups.filter(g=>accountStatus[g.name]!=="banned").map(g=>(
+                {groups.filter(g=>accountStatus[g.name]!=="banned" && labels[g.name]?.manualBan!=="1").map(g=>(
                   <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
                     collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
                     colCount={COLS.length} accSt={accountStatus[g.name]||"ok"} />
@@ -791,6 +806,11 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
             ⚠ Перевірити
           </span>
         )}
+        <button
+          onClick={e=>{ e.stopPropagation(); setLabel(accountId,"manualBan","1"); }}
+          title="Перенести в БАН вручну"
+          style={{background:"rgba(239,68,68,.15)",color:"var(--red)",border:"1px solid rgba(239,68,68,.3)",borderRadius:5,padding:"1px 7px",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap",marginLeft:"auto"}}
+        >В БАН</button>
       </div>
     </td>
   );
