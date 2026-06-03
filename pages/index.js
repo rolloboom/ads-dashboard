@@ -307,16 +307,16 @@ export default function Dashboard() {
     const result = {};
     Object.entries(map).forEach(([key, v]) => {
       if (now - v.lastTs > THREE_H) {
-        // No new data for 3+ hours → БАН
-        result[key] = "stale";
+        result[key] = "stale";   // RED — no data 3h+
+      } else if (v.lastImpT === 0) {
+        result[key] = "zero";    // BLUE — no impressions at all today (launching)
       } else if (
-        v.anchorImpT !== null &&      // have a comparison point
-        v.lastImpT > 0 &&             // currently has impressions (campaign ran today)
+        v.anchorImpT !== null &&
         v.lastImpT === v.anchorImpT   // impT didn't change in 3h → traffic stopped
       ) {
-        result[key] = "no_imp";
+        result[key] = "no_imp";  // YELLOW — traffic stopped
       } else {
-        result[key] = "ok";
+        result[key] = "ok";      // GREEN — traffic active
       }
     });
     return result;
@@ -988,6 +988,12 @@ function TrafficDot({ st }) {
     <div style={{display:"flex",alignItems:"center",gap:6}}>
       <span style={{width:10,height:10,borderRadius:"50%",background:"var(--yellow)",flexShrink:0,boxShadow:"0 0 6px var(--yellow)"}}/>
       <span style={{fontSize:11,color:"var(--yellow)",fontWeight:600}}>Немає трафіку</span>
+    </div>
+  );
+  if (st === "zero") return (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <span style={{width:10,height:10,borderRadius:"50%",background:"var(--blue)",flexShrink:0,boxShadow:"0 0 6px var(--blue)"}}/>
+      <span style={{fontSize:11,color:"var(--blue)",fontWeight:600}}>Пуск</span>
     </div>
   );
   return (
