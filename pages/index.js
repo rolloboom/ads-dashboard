@@ -354,7 +354,7 @@ export default function Dashboard() {
             <KpiCard label="DL сьогодні"      value={fmtN(kpiT.convT)}      color="yellow" sub="конверсій" />
             <KpiCard label="Витрати місяця"   value={"$"+fmt2(kpiT.month)}  color="purple" sub="цього місяця" />
             <KpiCard label="Активних"         value={kpiT.active}           color="green"  sub={`з ${kpiT.total} кампаній`} />
-            <KpiCard label="Policy проблем"   value={kpiT.pol}              color={kpiT.pol>0?"red":"green"} sub="кампаній" />
+            <KpiCard label="Policy проблем"   value={kpiT.pol}              color={kpiT.pol>0?"red":"green"} sub="кампаній" onClick={kpiT.pol>0?()=>setPolicyF(f=>f==="issues"?"":"issues"):undefined} active={policyF==="issues"} />
             {kpiT.banned>0  && <KpiCard label="🚫 БАН акаунти"   value={kpiT.banned}   color="red"    sub="перевір акаунти" />}
             {kpiT.payIssue>0 && <KpiCard label="💳 Проблема оплати" value={kpiT.payIssue} color="red"  sub="перевір білінг" />}
           </div>
@@ -374,7 +374,7 @@ export default function Dashboard() {
             <KpiCard label="Instal"         value={fmtN(totalInstal)}                        color="green"  sub="встановлень" />
             <KpiCard label="DL → Instal %"  value={kpiY.conv>0 && totalInstal>0 ? fmtPct(totalInstal/kpiY.conv*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
             <KpiCard label="CPI $"          value={totalInstal>0 && kpiY.spend>0 ? "$"+fmt2(kpiY.spend/totalInstal) : "—"} color={totalInstal>0?"accent":"muted"} sub="ціна інстала" />
-            <KpiCard label="Policy проблем" value={kpiY.pol}                                 color={kpiY.pol>0?"red":"green"} sub="кампаній" />
+            <KpiCard label="Policy проблем" value={kpiY.pol}                                 color={kpiY.pol>0?"red":"green"} sub="кампаній" onClick={kpiY.pol>0?()=>setPolicyF(f=>f==="issues"?"":"issues"):undefined} active={policyF==="issues"} />
           </div>
         )}
 
@@ -695,11 +695,15 @@ function SpendChart({ data }) {
 }
 
 // ── UI atoms
-function KpiCard({label,value,color,sub}){
+function KpiCard({label,value,color,sub,onClick,active}){
   const colors={accent:"var(--accent)",blue:"var(--blue)",purple:"var(--purple)",red:"var(--red)",yellow:"var(--yellow)",green:"var(--green)",muted:"var(--muted)"};
   return(
-    <div style={S.kpiCard}>
-      <div style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".6px",marginBottom:6}}>{label}</div>
+    <div
+      style={{...S.kpiCard, ...(onClick?{cursor:"pointer",userSelect:"none"}:{}), ...(active?{border:"1px solid var(--red)",background:"rgba(239,68,68,.08)"}:{})}}
+      onClick={onClick}
+      title={onClick?"Клікни для фільтрації":""}
+    >
+      <div style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".6px",marginBottom:6}}>{label}{onClick&&<span style={{opacity:.5,marginLeft:4,fontSize:10}}>▼</span>}</div>
       <div style={{fontSize:26,fontWeight:700,lineHeight:1,color:colors[color]||"var(--text)"}}>{value}</div>
       {sub&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>{sub}</div>}
     </div>
