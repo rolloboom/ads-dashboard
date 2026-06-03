@@ -147,9 +147,11 @@ export default function Dashboard() {
       return cmpFn(av, bv);
     } : null;
 
-    const list = Object.entries(map).map(([name,rows]) => ({
-      name, rows: rowSortFn ? [...rows].sort(rowSortFn) : rows,
-    }));
+    const list = Object.entries(map).map(([name,rows]) => {
+      const sortedRows = rowSortFn ? [...rows].sort(rowSortFn) : rows;
+      // Display name: if 1 campaign — show campaign name, else show account ID
+      return { name, displayName: name, rows: sortedRows };
+    });
 
     // Sort groups themselves by aggregate value of sortCol
     if (sortCol !== null) {
@@ -429,7 +431,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
     <td style={{...S.td, paddingLeft:14, whiteSpace:"nowrap", cursor:"pointer"}} onClick={onToggle}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <span style={{fontSize:11,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s"}}>▼</span>
-        <span style={{fontWeight:700,fontSize:13,color:"var(--text)"}}>{group.name}</span>
+        <span style={{fontWeight:700,fontSize:13,color:"var(--text)"}}>{group.displayName}</span>
         <span style={{fontSize:11,color:"var(--muted)",marginLeft:2}}>{rows.length} кам.</span>
       </div>
     </td>
