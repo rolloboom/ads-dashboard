@@ -9,8 +9,8 @@ const C = {
   geo: 20, domain: 21, monthSpend: 22,
 };
 
-const n      = v => parseFloat(v) || 0;
-const ni     = v => parseInt(v)   || 0;
+const n      = v => parseFloat(String(v).replace(",", ".")) || 0;
+const ni     = v => parseInt(String(v).replace(",", "."))  || 0;
 const fmt2   = v => n(v).toLocaleString("uk-UA", { minimumFractionDigits:2, maximumFractionDigits:2 });
 const fmt3   = v => n(v).toFixed(3);
 const fmtN   = v => ni(v).toLocaleString("uk-UA");

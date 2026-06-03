@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "GOOGLE_SHEETS_API_KEY not set" });
   }
 
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(tab)}?key=${apiKey}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(tab)}?key=${apiKey}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
 
   try {
     const r    = await fetch(url);
