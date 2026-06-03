@@ -355,9 +355,6 @@ export default function Dashboard() {
             <KpiCard label="Витрати місяця"   value={"$"+fmt2(kpiT.month)}  color="purple" sub="цього місяця" />
             <KpiCard label="Активних"         value={kpiT.active}           color="green"  sub={`з ${kpiT.total} кампаній`} />
             <KpiCard label="Policy проблем"   value={kpiT.pol}              color={kpiT.pol>0?"red":"green"} sub="кампаній" />
-            <KpiCard label="Instal"           value={fmtN(totalInstal)}  color="green"  sub="встановлень" />
-            <KpiCard label="DL → Instal %"    value={kpiT.convT>0 && totalInstal>0 ? fmtPct(totalInstal/kpiT.convT*100) : "—"} color={totalInstal>0?"green":"muted"} sub="конверсія в instal" />
-            <KpiCard label="CPI $"            value={totalInstal>0 && kpiT.spend>0 ? "$"+fmt2(kpiT.spend/totalInstal) : "—"} color={totalInstal>0?"accent":"muted"} sub="ціна інстала" />
             {kpiT.banned>0  && <KpiCard label="🚫 БАН акаунти"   value={kpiT.banned}   color="red"    sub="перевір акаунти" />}
             {kpiT.payIssue>0 && <KpiCard label="💳 Проблема оплати" value={kpiT.payIssue} color="red"  sub="перевір білінг" />}
           </div>
@@ -462,7 +459,7 @@ export default function Dashboard() {
                     </th>
                   ))}
                   <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Коментар</th>
-                  <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Instal</th>
+                  {tab==="yesterday" && <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Instal</th>}
                 </tr>
               </thead>
               <tbody>
@@ -553,10 +550,8 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
 
   // Instal cell — numeric input with OK button
   const instalVal  = parseInt(lbl.instal) || 0;
-  const dlCount    = tab === "yesterday" ? conv : convT;
-  const spendCount = tab === "yesterday" ? spendY : spendT;
-  const instalPct  = dlCount > 0 && instalVal > 0 ? fmtPct(instalVal / dlCount * 100) : null;
-  const instalCpi  = instalVal > 0 && spendCount > 0 ? fmt2(spendCount / instalVal) : null;
+  const instalPct  = conv > 0 && instalVal > 0 ? fmtPct(instalVal / conv * 100) : null;
+  const instalCpi  = instalVal > 0 && spendY > 0 ? fmt2(spendY / instalVal) : null;
   const instalCell = (
     <td style={{...S.td, minWidth:140}} onClick={e=>e.stopPropagation()}>
       <InstalCell
@@ -641,13 +636,11 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
         {commentCell}
-        {instalCell}
       </tr>
       {!collapsed&&rows.map((row,i)=>(
         <tr key={i} style={S.tr}>
           {COLS_TODAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
           <td style={S.td}></td>{/* comment spacer */}
-          <td style={S.td}></td>{/* instal spacer */}
         </tr>
       ))}
     </>
