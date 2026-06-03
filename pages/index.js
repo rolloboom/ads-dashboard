@@ -276,47 +276,47 @@ export default function Dashboard() {
   const accountStatus = useMemo(() => {
     const now     = Date.now();
     const THREE_H = 3 * 60 * 60 * 1000;
-    const map = {};
 
+    // Step 1: per (company||campaign) — find latest row and anchor row (≥3h old)
+    const perCamp = {};
     rawRows.forEach(row => {
-      const key = String(row[C.company]);
-      if (!key || key === "Компанія") return;
+      const company  = String(row[C.company]);
+      const campaign = String(row[C.campaign]);
+      if (!company || company === "Компанія") return;
       const dateStr = String(row[C.date]).slice(0, 10);
       const timeStr = String(row[C.time] || "00:00:00");
       const ts = new Date(dateStr + "T" + timeStr).getTime();
       if (isNaN(ts)) return;
 
-      if (!map[key]) map[key] = {
-        lastTs: 0, lastImpT: 0,        // most recent row
-        anchorTs: 0, anchorImpT: null, // latest row that is ≥3h old
-      };
-      const d = map[key];
+      const key = company + "||" + campaign;
+      if (!perCamp[key]) perCamp[key] = { company, lastTs:0, lastImpT:0, anchorTs:0, anchorImpT:null };
+      const d = perCamp[key];
 
-      // Most recent row
-      if (ts > d.lastTs) {
-        d.lastTs   = ts;
-        d.lastImpT = ni(row[C.impT]);
-      }
-      // Latest "anchor" row that's at least 3h old
-      if (now - ts >= THREE_H && ts > d.anchorTs) {
-        d.anchorTs   = ts;
-        d.anchorImpT = ni(row[C.impT]);
-      }
+      if (ts > d.lastTs)  { d.lastTs = ts; d.lastImpT = ni(row[C.impT]); }
+      if (now - ts >= THREE_H && ts > d.anchorTs) { d.anchorTs = ts; d.anchorImpT = ni(row[C.impT]); }
     });
 
+    // Step 2: aggregate per company — sum impT across all campaigns
+    const byCompany = {};
+    Object.values(perCamp).forEach(d => {
+      if (!byCompany[d.company]) byCompany[d.company] = { lastTs:0, lastImpT:0, anchorImpT:0, hasAnchor:false };
+      const c = byCompany[d.company];
+      if (d.lastTs > c.lastTs) c.lastTs = d.lastTs;
+      c.lastImpT += d.lastImpT;
+      if (d.anchorImpT !== null) { c.anchorImpT += d.anchorImpT; c.hasAnchor = true; }
+    });
+
+    // Step 3: decide status per company
     const result = {};
-    Object.entries(map).forEach(([key, v]) => {
+    Object.entries(byCompany).forEach(([company, v]) => {
       if (now - v.lastTs > THREE_H) {
-        result[key] = "stale";   // RED — no data 3h+
+        result[company] = "stale";   // RED — no data 3h+
       } else if (v.lastImpT === 0) {
-        result[key] = "zero";    // BLUE — no impressions at all today (launching)
-      } else if (
-        v.anchorImpT !== null &&
-        v.lastImpT === v.anchorImpT   // impT didn't change in 3h → traffic stopped
-      ) {
-        result[key] = "no_imp";  // YELLOW — traffic stopped
+        result[company] = "zero";    // BLUE — no impressions at all today
+      } else if (v.hasAnchor && v.lastImpT === v.anchorImpT) {
+        result[company] = "no_imp";  // YELLOW — traffic stopped (sum didn't grow)
       } else {
-        result[key] = "ok";      // GREEN — traffic active
+        result[company] = "ok";      // GREEN — traffic growing
       }
     });
     return result;
