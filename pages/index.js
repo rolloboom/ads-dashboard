@@ -307,10 +307,13 @@ export default function Dashboard() {
     });
 
     // Step 3: decide status per company
+    const TWO_DAYS = 48 * 60 * 60 * 1000;
     const result = {};
     Object.entries(byCompany).forEach(([company, v]) => {
-      if (now - v.lastTs > THREE_H) {
-        result[company] = "stale";   // RED — no data 3h+
+      if (now - v.lastTs > TWO_DAYS) {
+        result[company] = "banned";  // → БАН tab (2+ days without data)
+      } else if (now - v.lastTs > THREE_H) {
+        result[company] = "stale";   // RED in main table (3h-48h)
       } else if (v.lastImpT === 0) {
         result[company] = "zero";    // BLUE — no impressions at all today
       } else if (v.hasAnchor && v.lastImpT === v.anchorImpT) {
@@ -321,6 +324,28 @@ export default function Dashboard() {
     });
     return result;
   }, [rawRows]);
+
+  // ── Banned accounts (2+ days without data) — last known snapshot
+  const bannedGroups = useMemo(() => {
+    const bannedSet = new Set(Object.entries(accountStatus).filter(([,v])=>v==="banned").map(([k])=>k));
+    if (bannedSet.size === 0) return [];
+    const latest = {};
+    rawRows.forEach(row => {
+      const company = String(row[C.company]);
+      if (!bannedSet.has(company)) return;
+      const dateStr = String(row[C.date]).slice(0,10);
+      const timeStr = String(row[C.time]||"00:00:00");
+      const ts = new Date(dateStr+"T"+timeStr).getTime();
+      if (isNaN(ts)) return;
+      if (!latest[company] || ts > latest[company].ts) latest[company] = { row, ts };
+    });
+    return Object.entries(latest).map(([company, {row, ts}]) => ({
+      company,
+      lastSeen: new Date(ts).toLocaleString("uk-UA"),
+      lastTs: ts,
+      row,
+    })).sort((a,b) => b.lastTs - a.lastTs);
+  }, [rawRows, accountStatus]);
 
   // ── 7-day aggregated stats per account
   const weekGroups = useMemo(() => {
@@ -453,6 +478,10 @@ export default function Dashboard() {
             📈 7 днів
             <span style={S.tabDate}>{fmtDate(-6)} — {fmtDate(0)}</span>
           </button>
+          <button style={{...S.tab, ...(tab==="banned"?{...S.tabActive,borderColor:"var(--red)",background:"rgba(239,68,68,.1)"}:{})}} onClick={()=>setTab("banned")}>
+            🚫 БАН
+            {bannedGroups.length>0 && <span style={{background:"var(--red)",color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 7px",marginTop:2}}>{bannedGroups.length}</span>}
+          </button>
         </div>
 
         {/* KPI — TODAY */}
@@ -559,8 +588,57 @@ export default function Dashboard() {
           </div>
         </>)}
 
+        {/* BAN TAB */}
+        {tab==="banned" && (
+          <div>
+            {bannedGroups.length===0 ? (
+              <div style={S.empty}>
+                <div style={{fontSize:40,marginBottom:12}}>✅</div>
+                <div>Забанених акаунтів немає</div>
+              </div>
+            ) : (<>
+              <div style={{marginBottom:16,color:"var(--muted)",fontSize:13}}>
+                Акаунти без оновлень 48+ годин — автоматично перенесено з основної таблиці
+              </div>
+              <div style={S.tableWrap}>
+                <table style={S.table}>
+                  <thead>
+                    <tr>
+                      {["Акаунт","Останній запис","Домен","Гео","Витрати вчора $","Покази вчора","DL вчора","Місяць $","Коментар"].map(l=>(
+                        <th key={l} style={S.th}>{l}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bannedGroups.map(({company, lastSeen, row})=>(
+                      <tr key={company} style={{...S.tr, background:"rgba(239,68,68,.06)"}}>
+                        <td style={S.td}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{width:8,height:8,borderRadius:"50%",background:"var(--red)",boxShadow:"0 0 5px var(--red)",flexShrink:0}}/>
+                            <span style={{fontWeight:700,color:"var(--red)"}}>{labels[company]?.name||company}</span>
+                          </div>
+                        </td>
+                        <td style={S.td}><span style={{color:"var(--muted)",fontSize:12}}>{lastSeen}</span></td>
+                        <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500}}>{row[C.domain]||"—"}</span></td>
+                        <td style={S.td}><span style={{color:"var(--muted2)"}}>{row[C.geo]||"—"}</span></td>
+                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{n(row[C.spendY])>0?"$"+fmt2(row[C.spendY]):"—"}</span></td>
+                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{fmtN(row[C.impY])}</span></td>
+                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--yellow)"}}>{ni(row[C.conv])>0?fmtN(row[C.conv]):"—"}</span></td>
+                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{n(row[C.monthSpend])>0?"$"+fmt2(row[C.monthSpend]):"—"}</span></td>
+                        <td style={{...S.td,minWidth:180}} onClick={e=>e.stopPropagation()}>
+                          <EditableCell value={labels[company]?.comment||""} placeholder="+ коментар…" onSave={v=>setLabel(company,"comment",v)} muted />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>)}
+          </div>
+        )}
+
         {/* CHART */}
-        {tab!=="week" && chartData.length>1 && (
+        {tab!=="week" && tab!=="banned" && chartData.length>1 && (
           <div style={S.chartBox}>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:12,fontWeight:600,textTransform:"uppercase",letterSpacing:".5px"}}>
               {tab==="today"?"Витрати сьогодні по днях ($)":"Витрати вчора по днях ($)"}
@@ -569,8 +647,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* FILTERS — hidden on week tab */}
-        {tab!=="week" && <div style={S.filterBox}>
+        {/* FILTERS — hidden on week/banned tabs */}
+        {tab!=="week" && tab!=="banned" && <div style={S.filterBox}>
           <div style={S.filterRow}>
             <FGroup label="Від"><input style={S.inp} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} /></FGroup>
             <FGroup label="До"> <input style={S.inp} type="date" value={dateTo}   onChange={e=>setDateTo(e.target.value)}   /></FGroup>
@@ -615,7 +693,7 @@ export default function Dashboard() {
         </div>}
 
         {/* RESULTS BAR */}
-        {tab!=="week" && <div style={S.resultsBar}>
+        {tab!=="week" && tab!=="banned" && <div style={S.resultsBar}>
           <span style={{color:"var(--muted)",fontSize:12}}>
             {loading?"Завантаження…":`${filteredForTable.length} кампаній · ${groups.length} акаунтів`}
           </span>
@@ -627,7 +705,7 @@ export default function Dashboard() {
         </div>}
 
         {/* TABLE */}
-        {tab!=="week" && groups.length>0 && (
+        {tab!=="week" && tab!=="banned" && groups.length>0 && (
           <div style={S.tableWrap}>
             <table style={S.table}>
               <thead>
@@ -644,7 +722,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {groups.map(g=>(
+                {groups.filter(g=>accountStatus[g.name]!=="banned").map(g=>(
                   <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
                     collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
                     colCount={COLS.length} accSt={accountStatus[g.name]||"ok"} />
