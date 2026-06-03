@@ -92,6 +92,8 @@ export default function Dashboard() {
 
   const filtered = useMemo(() => {
     let r = rows;
+    // Always hide ended/removed campaigns
+    r = r.filter(x => !String(x[C.status]).includes("Завершена") && !String(x[C.status]).includes("Видалена"));
     if (dateFrom) r = r.filter(x => String(x[C.date]).slice(0,10) >= dateFrom);
     if (dateTo)   r = r.filter(x => String(x[C.date]).slice(0,10) <= dateTo);
     if (company)  r = r.filter(x => x[C.company] === company);
