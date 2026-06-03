@@ -137,15 +137,40 @@ export default function Dashboard() {
       map[key].push(r);
     });
     const isNum = col => [C.budget,C.spendY,C.spendT,C.impY,C.impT,C.clicksY,C.cpc,C.conv,C.policyN,C.monthSpend].includes(col);
-    const sortFn = sortCol !== null ? (a,b) => {
+    const cmpFn = (av, bv) => av < bv ? sortDir : av > bv ? -sortDir : 0;
+
+    // Sort rows within each group
+    const rowSortFn = sortCol !== null ? (a,b) => {
       let av = a[sortCol], bv = b[sortCol];
       if (isNum(sortCol)) { av = n(av); bv = n(bv); }
       else { av = String(av||"").toLowerCase(); bv = String(bv||"").toLowerCase(); }
-      return av < bv ? sortDir : av > bv ? -sortDir : 0;
+      return cmpFn(av, bv);
     } : null;
-    return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,rows])=>({
-      name, rows: sortFn ? [...rows].sort(sortFn) : rows,
+
+    const list = Object.entries(map).map(([name,rows]) => ({
+      name, rows: rowSortFn ? [...rows].sort(rowSortFn) : rows,
     }));
+
+    // Sort groups themselves by aggregate value of sortCol
+    if (sortCol !== null) {
+      list.sort((ga, gb) => {
+        if (isNum(sortCol)) {
+          return cmpFn(
+            ga.rows.reduce((s,r) => s + n(r[sortCol]), 0),
+            gb.rows.reduce((s,r) => s + n(r[sortCol]), 0)
+          );
+        } else {
+          return cmpFn(
+            String(ga.rows[0]?.[sortCol]||"").toLowerCase(),
+            String(gb.rows[0]?.[sortCol]||"").toLowerCase()
+          );
+        }
+      });
+    } else {
+      list.sort((a,b) => a.name.localeCompare(b.name));
+    }
+
+    return list;
   }, [filtered, sortCol, sortDir, tab]);
 
   // KPI yesterday
