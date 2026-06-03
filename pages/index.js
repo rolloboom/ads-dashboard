@@ -487,8 +487,10 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
         </td>
         <td style={S.td}>
           {impT>0
-            ? <span style={{color:"var(--green)",fontWeight:600}}>✓ {fmtN(impT)} показів</span>
-            : <span style={{color:"var(--muted)"}}>Ще немає</span>}
+            ? <span style={{color:"var(--green)",fontWeight:700}}>✓ Так</span>
+            : spendT>0
+              ? <span style={{color:"var(--yellow)",fontWeight:600}}>⏳ Розганяє</span>
+              : <span style={{color:"var(--muted)"}}>✗ Немає</span>}
         </td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(budget)}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",fontWeight:700,color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>${fmt2(spendT)}</span></td>
@@ -623,16 +625,16 @@ function ServingCell({status,policyS,policyN,impT,impY}){
   // Policy running despite ban — critical
   if(parseInt(policyN)>0&&String(policyS).includes("ТАК"))
     return <span style={{color:"var(--red)",fontWeight:700}}>🔴 Policy!</span>;
-  // Paused / suspended — always show regardless of impressions
-  if(s.includes("Пауза"))        return <span style={{color:"var(--muted)"}}>⏸ Пауза</span>;
-  if(s.includes("Призупинено"))  return <span style={{color:"var(--red)"}}>🚫 Стоп</span>;
-  // Primary signal: impressions today > 0 → running
-  const todayImp = parseInt(impT)||0;
-  const yesterdayImp = parseInt(impY)||0;
-  if(todayImp>0)     return <span style={{color:"var(--green)",fontWeight:600}}>✓ Крутить ({fmtN(todayImp)})</span>;
-  if(yesterdayImp>0&&!impT&&impT!==0) return <span style={{color:"var(--green)",fontWeight:600}}>✓ Так</span>;
-  if(s.includes("обмежена"))    return <span style={{color:"var(--yellow)",fontWeight:600}}>⚡ Обмежена</span>;
-  if(s.includes("крутить"))     return <span style={{color:"var(--yellow)",fontWeight:600}}>⏳ Ще не крутить</span>;
+  // Hard stops
+  if(s.includes("Пауза"))       return <span style={{color:"var(--muted)"}}>⏸ Пауза</span>;
+  if(s.includes("Призупинено")) return <span style={{color:"var(--red)"}}>🚫 Стоп</span>;
+  // Primary: impressions = running
+  if(parseInt(impT)>0) return <span style={{color:"var(--green)",fontWeight:700}}>✓ Так</span>;
+  if(parseInt(impY)>0) return <span style={{color:"var(--green)",fontWeight:700}}>✓ Так</span>;
+  // Budget limited
+  if(s.includes("обмежена")) return <span style={{color:"var(--yellow)",fontWeight:600}}>⚡ Обмежена</span>;
+  // Active but no impressions yet today
+  if(s.includes("крутить")) return <span style={{color:"var(--yellow)",fontWeight:600}}>⏳ Немає показів</span>;
   return <span style={{color:"var(--muted)"}}>—</span>;
 }
 function SortIcon({active,dir}){
