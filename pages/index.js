@@ -443,8 +443,9 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   const conv   = rows.reduce((s,r)=>s+ni(r[C.conv]),    0);
   const budget = rows.reduce((s,r)=>s+n(r[C.budget]),   0);
   const month  = rows.reduce((s,r)=>s+n(r[C.monthSpend]),0);
-  const pol    = rows.filter(r=>ni(r[C.policyN])>0).length;
+  const pol      = rows.filter(r=>ni(r[C.policyN])>0).length;
   const active   = rows.filter(r=>ni(r[C.impT])>0 || String(r[C.status]).includes("крутить")).length;
+  const isNewLaunch = impY === 0 && impT === 0; // zero impressions ever = new launch
   const ctr      = impY>0?(clicks/impY)*100:0;
   const cpc      = clicks>0?spendY/clicks:0;
   const cpm      = impY>0?(spendY/impY)*1000:0;
@@ -464,6 +465,11 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
           bold
         />
         <span style={{fontSize:10,color:"var(--muted)",flexShrink:0}}>{rows.length}</span>
+        {isNewLaunch && (
+          <span style={{background:"rgba(59,130,246,.2)",color:"var(--blue)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
+            🚀 Новий
+          </span>
+        )}
       </div>
     </td>
   );
