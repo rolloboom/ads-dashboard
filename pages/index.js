@@ -43,12 +43,12 @@ const COLS_TODAY = [
   { label:"Крео",             col:C.creo,       render: r => <Ellipsis v={r[C.creo]} w={150} muted /> },
   { label:"Тип",              col:C.type,       render: r => <Badge v={r[C.type]} color="blue" /> },
   { label:"Статус",           col:C.status,     render: r => <StatusBadge v={r[C.status]} /> },
-  { label:"Крутить?",         col:C.status,     render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} /> },
+  { label:"Крутить?",         col:C.status,     render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} impT={r[C.impT]} impY={r[C.impY]} /> },
   { label:"Бюджет $",         col:C.budget,     render: r => <Money v={r[C.budget]} /> },
   { label:"Витрати сьогодні $",col:C.spendT,    render: r => <Money v={r[C.spendT]} accent /> },
   { label:"Покази сьогодні",  col:C.impT,       render: r => <Num v={r[C.impT]} /> },
   { label:"Policy",           col:C.policyN,    render: r => <PolicyCell n={r[C.policyN]} d={r[C.policyD]} /> },
-  { label:"Крутить попри policy?", col:C.policyS, render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} /> },
+  { label:"Крутить попри policy?", col:C.policyS, render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} impT={r[C.impT]} impY={r[C.impY]} /> },
   { label:"Гео",              col:C.geo,        render: r => <Ellipsis v={r[C.geo]} w={160} muted /> },
   { label:"Домен",            col:C.domain,     render: r => <span style={{color:"var(--blue)",fontWeight:500}}>{r[C.domain]||"—"}</span> },
   { label:"Місяць $",         col:C.monthSpend, render: r => <Money v={r[C.monthSpend]} /> },
@@ -420,11 +420,13 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
   const budget = rows.reduce((s,r)=>s+n(r[C.budget]),   0);
   const month  = rows.reduce((s,r)=>s+n(r[C.monthSpend]),0);
   const pol    = rows.filter(r=>ni(r[C.policyN])>0).length;
-  const active = rows.filter(r=>String(r[C.status]).includes("крутить")).length;
-  const ctr    = impY>0?(clicks/impY)*100:0;
-  const cpc    = clicks>0?spendY/clicks:0;
-  const cpm    = impY>0?(spendY/impY)*1000:0;
-  const ctrT   = impT>0?0:0; // today has no clicks data
+  const active   = rows.filter(r=>ni(r[C.impT])>0 || String(r[C.status]).includes("крутить")).length;
+  const ctr      = impY>0?(clicks/impY)*100:0;
+  const cpc      = clicks>0?spendY/clicks:0;
+  const cpm      = impY>0?(spendY/impY)*1000:0;
+  // First non-empty geo and domain in the group
+  const geoVal   = rows.map(r=>String(r[C.geo]||"")).find(v=>v&&v!=="—") || "—";
+  const domainVal= rows.map(r=>String(r[C.domain]||"")).find(v=>v&&v!=="—") || "—";
 
   // Arrow toggle cell (first col)
   const arrowCell = (
@@ -461,8 +463,8 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
               ? <span style={{color:"var(--red)",fontWeight:700}}>⚠ {pol}</span>
               : <span style={{color:"var(--green)"}}>✓</span>}
           </td>
-          <td style={S.td}></td>{/* гео */}
-          <td style={S.td}></td>{/* домен */}
+          <td style={S.td}><span style={{color:"var(--muted2)",fontSize:12}}>{geoVal}</span></td>
+          <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         </tr>
         {!collapsed&&rows.map((row,i)=>(
           <tr key={i} style={S.tr}>
@@ -483,7 +485,11 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
         <td style={S.td}>
           <span style={{fontSize:11,color:"var(--green)"}}>{active} актив.</span>
         </td>
-        <td style={S.td}>{/* крутить */}</td>
+        <td style={S.td}>
+          {impT>0
+            ? <span style={{color:"var(--green)",fontWeight:600}}>✓ {fmtN(impT)} показів</span>
+            : <span style={{color:"var(--muted)"}}>Ще немає</span>}
+        </td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(budget)}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",fontWeight:700,color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>${fmt2(spendT)}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtN(impT)}</span></td>
@@ -492,9 +498,9 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
             ? <span style={{color:"var(--red)",fontWeight:700}}>⚠ {pol}</span>
             : <span style={{color:"var(--green)"}}>✓</span>}
         </td>
-        <td style={S.td}></td>{/* крутить попри */}
-        <td style={S.td}></td>{/* гео */}
-        <td style={S.td}></td>{/* домен */}
+        <td style={S.td}></td>{/* крутить попри policy */}
+        <td style={S.td}><span style={{color:"var(--muted2)",fontSize:12}}>{geoVal}</span></td>
+        <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
       </tr>
       {!collapsed&&rows.map((row,i)=>(
@@ -612,13 +618,21 @@ function PolicyCell({n:cnt,d}){
   if(!count) return <span style={{color:"var(--green)"}}>✓ OK</span>;
   return <span title={String(d)} style={{color:String(d).includes("Дизапрув")?"var(--red)":"var(--yellow)",fontWeight:600,cursor:"help"}}>⚠ {count}</span>;
 }
-function ServingCell({status,policyS,policyN}){
+function ServingCell({status,policyS,policyN,impT,impY}){
   const s=String(status||"");
-  if(parseInt(policyN)>0&&String(policyS).includes("ТАК")) return <span style={{color:"var(--red)",fontWeight:700}}>🔴 Policy!</span>;
-  if(s.includes("крутить")&&!s.includes("обмеж")) return <span style={{color:"var(--green)",fontWeight:600}}>✓ Так</span>;
-  if(s.includes("обмежена")) return <span style={{color:"var(--yellow)",fontWeight:600}}>⚡ Обмежена</span>;
-  if(s.includes("Пауза")) return <span style={{color:"var(--muted)"}}>⏸ Пауза</span>;
-  if(s.includes("Призупинено")) return <span style={{color:"var(--red)"}}>🚫 Стоп</span>;
+  // Policy running despite ban — critical
+  if(parseInt(policyN)>0&&String(policyS).includes("ТАК"))
+    return <span style={{color:"var(--red)",fontWeight:700}}>🔴 Policy!</span>;
+  // Paused / suspended — always show regardless of impressions
+  if(s.includes("Пауза"))        return <span style={{color:"var(--muted)"}}>⏸ Пауза</span>;
+  if(s.includes("Призупинено"))  return <span style={{color:"var(--red)"}}>🚫 Стоп</span>;
+  // Primary signal: impressions today > 0 → running
+  const todayImp = parseInt(impT)||0;
+  const yesterdayImp = parseInt(impY)||0;
+  if(todayImp>0)     return <span style={{color:"var(--green)",fontWeight:600}}>✓ Крутить ({fmtN(todayImp)})</span>;
+  if(yesterdayImp>0&&!impT&&impT!==0) return <span style={{color:"var(--green)",fontWeight:600}}>✓ Так</span>;
+  if(s.includes("обмежена"))    return <span style={{color:"var(--yellow)",fontWeight:600}}>⚡ Обмежена</span>;
+  if(s.includes("крутить"))     return <span style={{color:"var(--yellow)",fontWeight:600}}>⏳ Ще не крутить</span>;
   return <span style={{color:"var(--muted)"}}>—</span>;
 }
 function SortIcon({active,dir}){
