@@ -63,6 +63,19 @@ export default function Dashboard() {
   const [tab,      setTab]      = useState("today"); // "today" | "yesterday"
   const [collapsed,setCollapsed]= useState(null); // null = collapse all by default
 
+  // Custom labels: { [accountId]: { name: string, comment: string } }
+  const [labels, setLabels] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("ads_labels") || "{}"); } catch { return {}; }
+  });
+
+  const setLabel = useCallback((accountId, field, value) => {
+    setLabels(prev => {
+      const next = { ...prev, [accountId]: { ...(prev[accountId]||{}), [field]: value } };
+      localStorage.setItem("ads_labels", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const [dateFrom, setDateFrom] = useState(fmtDate(-7));
   const [dateTo,   setDateTo]   = useState(fmtDate(0));
   const [company,  setCompany]  = useState("");
@@ -398,11 +411,12 @@ export default function Dashboard() {
                       </span>
                     </th>
                   ))}
+                  <th style={{...S.th, color:"var(--muted)", cursor:"default"}}>Коментар</th>
                 </tr>
               </thead>
               <tbody>
                 {groups.map(g=>(
-                  <AccountGroup key={g.name} group={g} tab={tab}
+                  <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
                     collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
                     colCount={COLS.length} />
                 ))}
@@ -417,8 +431,10 @@ export default function Dashboard() {
   );
 }
 
-function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
+function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLabel }) {
   const rows   = group.rows;
+  const accountId = group.name; // raw account ID as storage key
+  const lbl    = labels?.[accountId] || {};
   const spendY = rows.reduce((s,r)=>s+n(r[C.spendY]),   0);
   const spendT = rows.reduce((s,r)=>s+n(r[C.spendT]),   0);
   const impY   = rows.reduce((s,r)=>s+ni(r[C.impY]),    0);
@@ -436,14 +452,31 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
   const geoVal   = rows.map(r=>String(r[C.geo]||"")).find(v=>v&&v!=="—") || "—";
   const domainVal= rows.map(r=>String(r[C.domain]||"")).find(v=>v&&v!=="—") || "—";
 
-  // Arrow toggle cell (first col)
+  // Arrow toggle cell
   const arrowCell = (
-    <td style={{...S.td, paddingLeft:14, whiteSpace:"nowrap", cursor:"pointer"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:11,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s"}}>▼</span>
-        <span style={{fontWeight:700,fontSize:13,color:"var(--text)"}}>{group.displayName}</span>
-        <span style={{fontSize:11,color:"var(--muted)",marginLeft:2}}>{rows.length} кам.</span>
+    <td style={{...S.td, paddingLeft:10, whiteSpace:"nowrap", cursor:"pointer", minWidth:160}}>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <span style={{fontSize:11,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s",flexShrink:0}}>▼</span>
+        <EditableCell
+          value={lbl.name || ""}
+          placeholder={group.displayName}
+          onSave={v => setLabel(accountId, "name", v)}
+          bold
+        />
+        <span style={{fontSize:10,color:"var(--muted)",flexShrink:0}}>{rows.length}</span>
       </div>
+    </td>
+  );
+
+  // Comment cell (last column)
+  const commentCell = (
+    <td style={{...S.td, minWidth:180}} onClick={e=>e.stopPropagation()}>
+      <EditableCell
+        value={lbl.comment || ""}
+        placeholder="+ коментар…"
+        onSave={v => setLabel(accountId, "comment", v)}
+        muted
+      />
     </td>
   );
 
@@ -473,10 +506,12 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
           </td>
           <td style={S.td}><span style={{color:"var(--muted2)",fontSize:12}}>{geoVal}</span></td>
           <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
+          {commentCell}
         </tr>
         {!collapsed&&rows.map((row,i)=>(
           <tr key={i} style={S.tr}>
             {COLS_YESTERDAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
+            <td style={S.td}></td>{/* comment spacer */}
           </tr>
         ))}
       </>
@@ -512,10 +547,12 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
         <td style={S.td}><span style={{color:"var(--muted2)",fontSize:12}}>{geoVal}</span></td>
         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
+        {commentCell}
       </tr>
       {!collapsed&&rows.map((row,i)=>(
         <tr key={i} style={S.tr}>
           {COLS_TODAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
+            <td style={S.td}></td>{/* comment spacer */}
         </tr>
       ))}
     </>
@@ -651,6 +688,54 @@ function SortIcon({active,dir}){
 }
 function Spinner(){
   return <div style={{width:36,height:36,border:"3px solid var(--bg4)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto"}}/>;
+}
+
+function EditableCell({ value, placeholder, onSave, bold, muted }) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(value);
+
+  useEffect(() => { setDraft(value); }, [value]);
+
+  function commit() {
+    setEditing(false);
+    if (draft !== value) onSave(draft);
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key==="Enter") commit(); if (e.key==="Escape") { setDraft(value); setEditing(false); } }}
+        onClick={e => e.stopPropagation()}
+        style={{
+          background:"var(--bg4)", border:"1px solid var(--accent)", color:"var(--text)",
+          borderRadius:5, padding:"3px 7px", fontSize:13, outline:"none",
+          width:"100%", minWidth:120, fontWeight: bold ? 700 : 400,
+        }}
+      />
+    );
+  }
+
+  const hasVal = value && value.trim();
+  return (
+    <span
+      onClick={e => { e.stopPropagation(); setEditing(true); }}
+      title="Клікни щоб редагувати"
+      style={{
+        display:"block", cursor:"text", minWidth:hasVal ? "auto" : 90,
+        color: hasVal ? (bold ? "var(--text)" : "var(--muted2)") : "var(--border)",
+        fontWeight: bold && hasVal ? 700 : 400,
+        fontSize: 13,
+        padding:"2px 0",
+        borderBottom: hasVal ? "none" : "1px dashed var(--border)",
+      }}
+    >
+      {hasVal ? value : placeholder}
+    </span>
+  );
 }
 
 const S={
