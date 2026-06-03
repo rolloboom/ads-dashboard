@@ -272,11 +272,12 @@ export default function Dashboard() {
     return Object.entries(byDate).sort((a,b)=>a[0]<b[0]?-1:1).slice(-30).map(([date,spend])=>({date,spend}));
   }, [rawRows, tab]);
 
-  // Staleness / impression-gap detection per account
+  // Staleness / traffic-stop detection per account
   const accountStatus = useMemo(() => {
-    const now = Date.now();
+    const now     = Date.now();
     const THREE_H = 3 * 60 * 60 * 1000;
     const map = {};
+
     rawRows.forEach(row => {
       const key = String(row[C.company]);
       if (!key || key === "Компанія") return;
@@ -284,19 +285,39 @@ export default function Dashboard() {
       const timeStr = String(row[C.time] || "00:00:00");
       const ts = new Date(dateStr + "T" + timeStr).getTime();
       if (isNaN(ts)) return;
-      if (!map[key]) map[key] = { lastTs: 0, everHadImp: false, recentHasImp: false };
-      if (ts > map[key].lastTs) map[key].lastTs = ts;
-      const hasImp = ni(row[C.impY]) > 0 || ni(row[C.impT]) > 0;
-      if (hasImp) {
-        map[key].everHadImp = true;
-        if (now - ts < THREE_H) map[key].recentHasImp = true;
+
+      if (!map[key]) map[key] = {
+        lastTs: 0, lastImpT: 0,        // most recent row
+        anchorTs: 0, anchorImpT: null, // latest row that is ≥3h old
+      };
+      const d = map[key];
+
+      // Most recent row
+      if (ts > d.lastTs) {
+        d.lastTs   = ts;
+        d.lastImpT = ni(row[C.impT]);
+      }
+      // Latest "anchor" row that's at least 3h old
+      if (now - ts >= THREE_H && ts > d.anchorTs) {
+        d.anchorTs   = ts;
+        d.anchorImpT = ni(row[C.impT]);
       }
     });
+
     const result = {};
     Object.entries(map).forEach(([key, v]) => {
-      if (now - v.lastTs > THREE_H)          result[key] = "stale";   // RED — no data 3h+
-      else if (v.everHadImp && !v.recentHasImp) result[key] = "no_imp"; // YELLOW — had imp, none last 3h
-      else                                    result[key] = "ok";
+      if (now - v.lastTs > THREE_H) {
+        // No new data for 3+ hours → БАН
+        result[key] = "stale";
+      } else if (
+        v.anchorImpT !== null &&      // have a comparison point
+        v.lastImpT > 0 &&             // currently has impressions (campaign ran today)
+        v.lastImpT === v.anchorImpT   // impT didn't change in 3h → traffic stopped
+      ) {
+        result[key] = "no_imp";
+      } else {
+        result[key] = "ok";
+      }
     });
     return result;
   }, [rawRows]);
