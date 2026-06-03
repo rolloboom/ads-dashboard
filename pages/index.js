@@ -2,11 +2,15 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Head from "next/head";
 
 const C = {
-  date: 0, time: 1, company: 2, accountId: 3, currency: 4,
-  campaign: 5, creo: 6, type: 7, status: 8, budget: 9,
-  spendY: 10, spendT: 11, impY: 12, impT: 13, clicksY: 14,
-  cpc: 15, conv: 16, policyN: 17, policyD: 18, policyS: 19,
-  geo: 20, domain: 21, monthSpend: 22,
+  date: 0, time: 1, company: 2, accountId: 3,
+  accStatus: 4, payStatus: 5,          // NEW: account & payment status
+  currency: 6,
+  campaign: 7, creo: 8, type: 9, status: 10, budget: 11,
+  spendY: 12, spendT: 13, impY: 14, impT: 15, clicksY: 16,
+  cpc: 17,
+  conv: 18, convT: 19,                 // NEW: downloads today at index 19
+  policyN: 20, policyD: 21, policyS: 22,
+  geo: 23, domain: 24, monthSpend: 25,
 };
 
 const n      = v => parseFloat(String(v).replace(",", ".")) || 0;
@@ -31,7 +35,7 @@ const COLS_YESTERDAY = [
   { label:"CTR",              col:C.clicksY,    render: r => <CTRCell clicks={r[C.clicksY]} imp={r[C.impY]} /> },
   { label:"CPC $",            col:C.cpc,        render: r => <Money v={r[C.cpc]} digits={3} /> },
   { label:"CPM $",            col:C.spendY,     render: r => <CPMCell spend={r[C.spendY]} imp={r[C.impY]} /> },
-  { label:"Downloads",        col:C.conv,       render: r => <Num v={r[C.conv]} yellow /> },
+  { label:"DL вчора",         col:C.conv,       render: r => <Num v={r[C.conv]} yellow /> },
   { label:"Policy",           col:C.policyN,    render: r => <PolicyCell n={r[C.policyN]} d={r[C.policyD]} /> },
   { label:"Гео",              col:C.geo,        render: r => <Ellipsis v={r[C.geo]} w={160} muted /> },
   { label:"Домен",            col:C.domain,     render: r => <span style={{color:"var(--blue)",fontWeight:500}}>{r[C.domain]||"—"}</span> },
@@ -47,8 +51,9 @@ const COLS_TODAY = [
   { label:"Бюджет $",         col:C.budget,     render: r => <Money v={r[C.budget]} /> },
   { label:"Витрати сьогодні $",col:C.spendT,    render: r => <Money v={r[C.spendT]} accent /> },
   { label:"Покази сьогодні",  col:C.impT,       render: r => <Num v={r[C.impT]} /> },
+  { label:"DL сьогодні",      col:C.convT,      render: r => <Num v={r[C.convT]} yellow /> },
   { label:"Policy",           col:C.policyN,    render: r => <PolicyCell n={r[C.policyN]} d={r[C.policyD]} /> },
-  { label:"Крутить попри policy?", col:C.policyS, render: r => <ServingCell status={r[C.status]} policyS={r[C.policyS]} policyN={r[C.policyN]} impT={r[C.impT]} impY={r[C.impY]} /> },
+  { label:"Акаунт",           col:C.accStatus,  render: r => <AccStatusCell v={r[C.accStatus]} p={r[C.payStatus]} /> },
   { label:"Гео",              col:C.geo,        render: r => <Ellipsis v={r[C.geo]} w={160} muted /> },
   { label:"Домен",            col:C.domain,     render: r => <span style={{color:"var(--blue)",fontWeight:500}}>{r[C.domain]||"—"}</span> },
   { label:"Місяць $",         col:C.monthSpend, render: r => <Money v={r[C.monthSpend]} /> },
@@ -218,11 +223,14 @@ export default function Dashboard() {
   const kpiT = useMemo(() => {
     const spend  = filtered.reduce((s,r)=>s+n(r[C.spendT]),  0);
     const imp    = filtered.reduce((s,r)=>s+ni(r[C.impT]),   0);
+    const convT  = filtered.reduce((s,r)=>s+ni(r[C.convT]),  0);
     const month  = filtered.reduce((s,r)=>s+n(r[C.monthSpend]),0);
     const pol    = filtered.filter(r=>ni(r[C.policyN])>0).length;
     const active = filtered.filter(r=>String(r[C.status]).includes("крутить")).length;
     const paused = filtered.filter(r=>String(r[C.status]).includes("Пауза")).length;
-    return { spend, imp, month, pol, active, paused, total: filtered.length };
+    const banned = filtered.filter(r=>String(r[C.accStatus]).includes("БАН")).length;
+    const payIssue = filtered.filter(r=>String(r[C.payStatus]).includes("Проблема")).length;
+    return { spend, imp, convT, month, pol, active, paused, banned, payIssue, total: filtered.length };
   }, [filtered]);
 
   // Chart data
@@ -309,10 +317,12 @@ export default function Dashboard() {
           <div style={S.kpiGrid}>
             <KpiCard label="Витрати сьогодні" value={"$"+fmt2(kpiT.spend)}  color="accent" sub="поточний день" />
             <KpiCard label="Покази сьогодні"  value={fmtN(kpiT.imp)}        color="blue"   sub="impressions" />
+            <KpiCard label="DL сьогодні"      value={fmtN(kpiT.convT)}      color="yellow" sub="конверсій" />
             <KpiCard label="Витрати місяця"   value={"$"+fmt2(kpiT.month)}  color="purple" sub="цього місяця" />
             <KpiCard label="Активних"         value={kpiT.active}           color="green"  sub={`з ${kpiT.total} кампаній`} />
-            <KpiCard label="На паузі"         value={kpiT.paused}           color="muted"  sub="кампаній" />
             <KpiCard label="Policy проблем"   value={kpiT.pol}              color={kpiT.pol>0?"red":"green"} sub="кампаній" />
+            {kpiT.banned>0  && <KpiCard label="🚫 БАН акаунти"   value={kpiT.banned}   color="red"    sub="перевір акаунти" />}
+            {kpiT.payIssue>0 && <KpiCard label="💳 Проблема оплати" value={kpiT.payIssue} color="red"  sub="перевір білінг" />}
           </div>
         )}
 
@@ -697,6 +707,20 @@ function SortIcon({active,dir}){
 }
 function Spinner(){
   return <div style={{width:36,height:36,border:"3px solid var(--bg4)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto"}}/>;
+}
+
+function AccStatusCell({ v, p }) {
+  const acc = String(v||"");
+  const pay = String(p||"");
+  const isBan = acc.includes("БАН");
+  const isPay = pay.includes("Проблема");
+  if (!isBan && !isPay) return <span style={{color:"var(--green)",fontSize:12}}>✓ OK</span>;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:2}}>
+      {isBan && <span style={{color:"var(--red)",fontWeight:700,fontSize:11}}>🚫 {acc}</span>}
+      {isPay && <span style={{color:"var(--yellow)",fontWeight:600,fontSize:11}}>💳 {pay}</span>}
+    </div>
+  );
 }
 
 function EditableCell({ value, placeholder, onSave, bold, muted }) {
