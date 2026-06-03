@@ -445,7 +445,10 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   const month  = rows.reduce((s,r)=>s+n(r[C.monthSpend]),0);
   const pol      = rows.filter(r=>ni(r[C.policyN])>0).length;
   const active   = rows.filter(r=>ni(r[C.impT])>0 || String(r[C.status]).includes("крутить")).length;
-  const isNewLaunch = impY === 0 && impT === 0; // zero impressions ever = new launch
+  // Check new launch: exclude Video views, check if remaining campaigns have any impressions
+  const nonVideoRows = rows.filter(r => !String(r[C.campaign]).toLowerCase().includes("video views"));
+  const hasImpNonVideo = nonVideoRows.some(r => ni(r[C.impY]) > 0 || ni(r[C.impT]) > 0);
+  const isNewLaunch = nonVideoRows.length > 0 && !hasImpNonVideo;
   const ctr      = impY>0?(clicks/impY)*100:0;
   const cpc      = clicks>0?spendY/clicks:0;
   const cpm      = impY>0?(spendY/impY)*1000:0;
