@@ -181,7 +181,7 @@ export default function Dashboard() {
     }
 
     return list;
-  }, [filtered, sortCol, sortDir, tab]);
+  }, [filteredForTable, sortCol, sortDir, tab]);
 
   // KPI yesterday
   const kpiY = useMemo(() => {
@@ -376,7 +376,7 @@ export default function Dashboard() {
         {/* RESULTS BAR */}
         <div style={S.resultsBar}>
           <span style={{color:"var(--muted)",fontSize:12}}>
-            {loading?"Завантаження…":`${filtered.length} кампаній · ${groups.length} акаунтів`}
+            {loading?"Завантаження…":`${filteredForTable.length} кампаній · ${groups.length} акаунтів`}
           </span>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <button style={S.smallBtn} onClick={expandAll}>Розкрити всі</button>
