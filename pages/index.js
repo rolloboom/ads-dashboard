@@ -451,6 +451,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   const impT   = rows.reduce((s,r)=>s+ni(r[C.impT]),    0);
   const clicks = rows.reduce((s,r)=>s+ni(r[C.clicksY]), 0);
   const conv   = rows.reduce((s,r)=>s+ni(r[C.conv]),    0);
+  const convT  = rows.reduce((s,r)=>s+ni(r[C.convT]),   0);
   const budget = rows.reduce((s,r)=>s+n(r[C.budget]),   0);
   const month  = rows.reduce((s,r)=>s+n(r[C.monthSpend]),0);
   const pol      = rows.filter(r=>ni(r[C.policyN])>0).length;
@@ -557,12 +558,13 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(budget)}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",fontWeight:700,color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>${fmt2(spendT)}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>{fmtN(impT)}</span></td>
+        <td style={S.td}><span style={{display:"block",textAlign:"right",color:convT>0?"var(--yellow)":"var(--muted)",fontWeight:convT>0?600:400,fontVariantNumeric:"tabular-nums"}}>{fmtN(convT)}</span></td>{/* DL сьогодні */}
         <td style={S.td}>
           {pol>0
             ? <span style={{color:"var(--red)",fontWeight:700}}>⚠ {pol}</span>
             : <span style={{color:"var(--green)"}}>✓</span>}
         </td>
-        <td style={S.td}></td>{/* крутить попри policy */}
+        <td style={S.td}></td>{/* акаунт */}
         <td style={S.td}><span style={{color:"var(--muted2)",fontSize:12}}>{geoVal}</span></td>
         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
