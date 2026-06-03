@@ -812,7 +812,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
             ? <span style={{color:"var(--red)",fontWeight:700}}>⚠ {pol}</span>
             : <span style={{color:"var(--green)"}}>✓</span>}
         </td>
-        <td style={S.td}></td>{/* акаунт */}
+        <td style={S.td}><TrafficDot st={accSt} /></td>
         <td style={S.td}><span style={{color:"var(--muted2)",fontSize:12}}>{geoVal}</span></td>
         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500,fontSize:12}}>{domainVal}</span></td>
         <td style={S.td}><span style={{display:"block",textAlign:"right",color:"var(--muted2)",fontVariantNumeric:"tabular-nums"}}>${fmt2(month)}</span></td>
@@ -973,6 +973,27 @@ function AccStatusCell({ v, p }) {
     <div style={{display:"flex",flexDirection:"column",gap:2}}>
       {isBan && <span style={{color:"var(--red)",fontWeight:700,fontSize:11}}>🚫 {acc}</span>}
       {isPay && <span style={{color:"var(--yellow)",fontWeight:600,fontSize:11}}>💳 {pay}</span>}
+    </div>
+  );
+}
+
+function TrafficDot({ st }) {
+  if (st === "stale") return (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <span style={{width:10,height:10,borderRadius:"50%",background:"var(--red)",flexShrink:0,boxShadow:"0 0 6px var(--red)"}}/>
+      <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>БАН</span>
+    </div>
+  );
+  if (st === "no_imp") return (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <span style={{width:10,height:10,borderRadius:"50%",background:"var(--yellow)",flexShrink:0,boxShadow:"0 0 6px var(--yellow)"}}/>
+      <span style={{fontSize:11,color:"var(--yellow)",fontWeight:600}}>Немає трафіку</span>
+    </div>
+  );
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <span style={{width:10,height:10,borderRadius:"50%",background:"var(--green)",flexShrink:0,boxShadow:"0 0 6px var(--green)"}}/>
+      <span style={{fontSize:11,color:"var(--green)",fontWeight:600}}>Трафік є</span>
     </div>
   );
 }
