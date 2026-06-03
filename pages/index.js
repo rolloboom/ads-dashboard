@@ -428,7 +428,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount }) {
 
   // Arrow toggle cell (first col)
   const arrowCell = (
-    <td style={{...S.td, paddingLeft:14, whiteSpace:"nowrap", cursor:"pointer"}} onClick={onToggle}>
+    <td style={{...S.td, paddingLeft:14, whiteSpace:"nowrap", cursor:"pointer"}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <span style={{fontSize:11,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s"}}>▼</span>
         <span style={{fontWeight:700,fontSize:13,color:"var(--text)"}}>{group.displayName}</span>
