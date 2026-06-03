@@ -249,6 +249,35 @@ export default function Dashboard() {
     return Object.entries(byDate).sort((a,b)=>a[0]<b[0]?-1:1).slice(-30).map(([date,spend])=>({date,spend}));
   }, [rawRows, tab]);
 
+  // Staleness / impression-gap detection per account
+  const accountStatus = useMemo(() => {
+    const now = Date.now();
+    const THREE_H = 3 * 60 * 60 * 1000;
+    const map = {};
+    rawRows.forEach(row => {
+      const key = String(row[C.company]);
+      if (!key || key === "Компанія") return;
+      const dateStr = String(row[C.date]).slice(0, 10);
+      const timeStr = String(row[C.time] || "00:00:00");
+      const ts = new Date(dateStr + "T" + timeStr).getTime();
+      if (isNaN(ts)) return;
+      if (!map[key]) map[key] = { lastTs: 0, everHadImp: false, recentHasImp: false };
+      if (ts > map[key].lastTs) map[key].lastTs = ts;
+      const hasImp = ni(row[C.impY]) > 0 || ni(row[C.impT]) > 0;
+      if (hasImp) {
+        map[key].everHadImp = true;
+        if (now - ts < THREE_H) map[key].recentHasImp = true;
+      }
+    });
+    const result = {};
+    Object.entries(map).forEach(([key, v]) => {
+      if (now - v.lastTs > THREE_H)          result[key] = "stale";   // RED — no data 3h+
+      else if (v.everHadImp && !v.recentHasImp) result[key] = "no_imp"; // YELLOW — had imp, none last 3h
+      else                                    result[key] = "ok";
+    });
+    return result;
+  }, [rawRows]);
+
   // null means "all collapsed" — resolved lazily when groups are known
   const collapsedSet = useMemo(
     () => collapsed === null ? new Set(groups.map(g=>g.name)) : collapsed,
@@ -428,7 +457,7 @@ export default function Dashboard() {
                 {groups.map(g=>(
                   <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
                     collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
-                    colCount={COLS.length} />
+                    colCount={COLS.length} accSt={accountStatus[g.name]||"ok"} />
                 ))}
               </tbody>
             </table>
@@ -441,7 +470,7 @@ export default function Dashboard() {
   );
 }
 
-function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLabel }) {
+function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLabel, accSt }) {
   const rows   = group.rows;
   const accountId = group.name; // raw account ID as storage key
   const lbl    = labels?.[accountId] || {};
@@ -484,6 +513,16 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
             🚀 Новий
           </span>
         )}
+        {accSt==="stale" && (
+          <span style={{background:"rgba(239,68,68,.2)",color:"var(--red)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
+            🚫 БАН
+          </span>
+        )}
+        {accSt==="no_imp" && (
+          <span style={{background:"rgba(245,158,11,.2)",color:"var(--yellow)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
+            ⚠ Перевірити
+          </span>
+        )}
       </div>
     </td>
   );
@@ -500,11 +539,13 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
     </td>
   );
 
+  const rowBg = accSt==="stale" ? "rgba(239,68,68,.08)" : accSt==="no_imp" ? "rgba(245,158,11,.07)" : "var(--bg3)";
+
   // Summary row for YESTERDAY tab
   if (tab==="yesterday") {
     return (
       <>
-        <tr style={{...S.tr, background:"var(--bg3)", cursor:"pointer"}} onClick={onToggle}>
+        <tr style={{...S.tr, background:rowBg, cursor:"pointer"}} onClick={onToggle}>
           {arrowCell}
           <td style={S.td}></td>{/* крео */}
           <td style={S.td}></td>{/* тип */}
@@ -541,7 +582,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   // Summary row for TODAY tab
   return (
     <>
-      <tr style={{...S.tr, background:"var(--bg3)", cursor:"pointer"}} onClick={onToggle}>
+      <tr style={{...S.tr, background:rowBg, cursor:"pointer"}} onClick={onToggle}>
         {arrowCell}
         <td style={S.td}></td>{/* крео */}
         <td style={S.td}></td>{/* тип */}
