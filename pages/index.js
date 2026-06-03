@@ -77,14 +77,12 @@ export default function Dashboard() {
     setLabels(prev => {
       const next = { ...prev, [accountId]: { ...(prev[accountId]||{}), [field]: value } };
       localStorage.setItem("ads_labels", JSON.stringify(next));
-      // Persist instal to Google Sheet
-      if (field === "instal") {
-        fetch("/api/instals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: accountId, instal: value }),
-        }).catch(() => {}); // silent fail — localStorage is the fallback
-      }
+      // Persist to Google Sheet (shared between users)
+      fetch("/api/labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: accountId, field, value }),
+      }).catch(() => {});
       return next;
     });
   }, []);
@@ -103,9 +101,9 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [r, ri] = await Promise.all([fetch("/api/data"), fetch("/api/instals")]);
+      const [r, rl] = await Promise.all([fetch("/api/data"), fetch("/api/labels")]);
       const j  = await r.json();
-      const ji = await ri.json().catch(() => ({}));
+      const jl = await rl.json().catch(() => ({}));
       if (j.error) throw new Error(j.error);
       const allRows = j.rows || [];
       setRawRows(allRows);
@@ -116,12 +114,12 @@ export default function Dashboard() {
         if (!map[key] || ts > map[key].ts) map[key] = { row, ts };
       });
       setRows(Object.values(map).map(x => x.row));
-      // Merge sheet instals into labels (sheet wins over localStorage)
-      if (ji.instals && Object.keys(ji.instals).length > 0) {
+      // Merge sheet labels into state (sheet wins — shared between users)
+      if (jl.labels && Object.keys(jl.labels).length > 0) {
         setLabels(prev => {
           const next = { ...prev };
-          Object.entries(ji.instals).forEach(([key, val]) => {
-            next[key] = { ...(next[key]||{}), instal: val };
+          Object.entries(jl.labels).forEach(([key, val]) => {
+            next[key] = { ...(next[key]||{}), ...val };
           });
           localStorage.setItem("ads_labels", JSON.stringify(next));
           return next;
