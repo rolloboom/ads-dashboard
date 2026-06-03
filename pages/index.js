@@ -61,7 +61,7 @@ export default function Dashboard() {
   const [error,    setError]    = useState(null);
   const [updated,  setUpdated]  = useState(null);
   const [tab,      setTab]      = useState("today"); // "today" | "yesterday"
-  const [collapsed,setCollapsed]= useState(new Set());
+  const [collapsed,setCollapsed]= useState(null); // null = collapse all by default
 
   const [dateFrom, setDateFrom] = useState(fmtDate(-7));
   const [dateTo,   setDateTo]   = useState(fmtDate(0));
@@ -193,10 +193,20 @@ export default function Dashboard() {
     return Object.entries(byDate).sort((a,b)=>a[0]<b[0]?-1:1).slice(-30).map(([date,spend])=>({date,spend}));
   }, [rawRows, tab]);
 
+  // null means "all collapsed" — resolved lazily when groups are known
+  const collapsedSet = useMemo(
+    () => collapsed === null ? new Set(groups.map(g=>g.name)) : collapsed,
+    [collapsed, groups]
+  );
+
   function toggleCollapse(name) {
-    setCollapsed(prev=>{ const s=new Set(prev); s.has(name)?s.delete(name):s.add(name); return s; });
+    setCollapsed(prev=>{
+      const base = prev === null ? new Set(groups.map(g=>g.name)) : new Set(prev);
+      base.has(name) ? base.delete(name) : base.add(name);
+      return base;
+    });
   }
-  function collapseAll(){ setCollapsed(new Set(groups.map(g=>g.name))); }
+  function collapseAll(){ setCollapsed(null); }
   function expandAll(){   setCollapsed(new Set()); }
   function handleSort(col){ if(sortCol===col) setSortDir(d=>-d); else{setSortCol(col);setSortDir(-1);} }
   function resetFilters(){
@@ -358,7 +368,7 @@ export default function Dashboard() {
               <tbody>
                 {groups.map(g=>(
                   <AccountGroup key={g.name} group={g} tab={tab}
-                    collapsed={collapsed.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
+                    collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
                     colCount={COLS.length} />
                 ))}
               </tbody>
