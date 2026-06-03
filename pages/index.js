@@ -129,9 +129,14 @@ export default function Dashboard() {
 
   const COLS = tab === "yesterday" ? COLS_YESTERDAY : COLS_TODAY;
 
+  // Table shows only non-Video views campaigns; KPI uses full filtered set
+  const filteredForTable = useMemo(() =>
+    filtered.filter(x => !String(x[C.campaign]).toLowerCase().includes("video views"))
+  , [filtered]);
+
   const groups = useMemo(() => {
     const map = {};
-    filtered.forEach(r => {
+    filteredForTable.forEach(r => {
       const key = String(r[C.company]||"—");
       if (!map[key]) map[key] = [];
       map[key].push(r);
@@ -150,7 +155,10 @@ export default function Dashboard() {
     const list = Object.entries(map).map(([name,rows]) => {
       const sortedRows = rowSortFn ? [...rows].sort(rowSortFn) : rows;
       // Display name: if 1 campaign — show campaign name, else show account ID
-      return { name, displayName: name, rows: sortedRows };
+      // Use campaign name as display; if multiple campaigns — show account ID
+      const campNames = [...new Set(sortedRows.map(r => String(r[C.campaign]||"")).filter(Boolean))];
+      const displayName = campNames.length === 1 ? campNames[0] : name;
+      return { name, displayName, rows: sortedRows };
     });
 
     // Sort groups themselves by aggregate value of sortCol
