@@ -316,8 +316,8 @@ export default function Dashboard() {
         result[company] = "stale";   // RED in main table (3h-48h)
       } else if (v.lastImpT === 0) {
         result[company] = "zero";    // BLUE — no impressions at all today
-      } else if (v.hasAnchor && v.lastImpT === v.anchorImpT) {
-        result[company] = "no_imp";  // YELLOW — traffic stopped (sum didn't grow)
+      } else if (v.hasAnchor && (v.lastImpT - v.anchorImpT) < 100) {
+        result[company] = "no_imp";  // YELLOW — less than 100 new impressions in 3h
       } else {
         result[company] = "ok";      // GREEN — traffic growing
       }
