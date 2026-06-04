@@ -507,6 +507,7 @@ export default function Dashboard() {
             <KpiCard label="Витрати сьогодні" value={"$"+fmt2(kpiT.spend)}  color="accent" sub="поточний день" />
             <KpiCard label="Покази сьогодні"  value={fmtN(kpiT.imp)}        color="blue"   sub="impressions" />
             <KpiCard label="DL сьогодні"      value={fmtN(kpiT.convT)}      color="yellow" sub="конверсій" />
+            <KpiCard label="Ціна DL сьогодні" value={kpiT.convT>0?"$"+fmt2(kpiT.spend/kpiT.convT):"—"} color={kpiT.convT>0?"accent":"muted"} sub="витрати ÷ DL" />
             <KpiCard label="Витрати місяця"   value={"$"+fmt2(kpiT.month)}  color="purple" sub="цього місяця" />
             <KpiCard label="Активних"         value={kpiT.active}           color="green"  sub={`з ${kpiT.total} кампаній`} />
             <KpiCard label="Policy проблем"   value={kpiT.pol}              color={kpiT.pol>0?"red":"green"} sub="кампаній" onClick={kpiT.pol>0?()=>setPolicyF(f=>f==="issues"?"":"issues"):undefined} active={policyF==="issues"} />
