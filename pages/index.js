@@ -939,46 +939,121 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
 
 // ── Chart
 function SpendChart({ data }) {
-  const [hover,setHover]=useState(null);
-  const W=100,H=100,PAD={top:8,right:6,bottom:24,left:44};
-  const iW=W-PAD.left-PAD.right, iH=H-PAD.top-PAD.bottom;
-  const max=Math.max(...data.map(d=>d.spend),0.01);
-  const bW=iW/data.length, gap=Math.max(0.5,bW*.15);
-  const ticks=[0,max*.5,max].map(v=>({ y:PAD.top+iH-(v/max)*iH, label:"$"+(v>=1000?(v/1000).toFixed(1)+"k":fmt2(v)) }));
+  const [hover, setHover] = useState(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setReady(true), 60); return () => clearTimeout(t); }, []);
+
+  const W = 800, H = 180;
+  const PAD = { top: 20, right: 20, bottom: 36, left: 56 };
+  const iW = W - PAD.left - PAD.right;
+  const iH = H - PAD.top - PAD.bottom;
+  const max = Math.max(...data.map(d => d.spend), 0.01);
+  const n = data.length;
+  const bW = iW / n;
+
+  const xOf = i => PAD.left + i * bW + bW / 2;
+  const yOf = v => PAD.top + iH - (v / max) * iH;
+
+  // Line path
+  const linePts = data.map((d, i) => `${xOf(i)},${yOf(d.spend)}`).join(" L ");
+  const linePath = `M ${linePts}`;
+
+  // Area path (for gradient fill under the line)
+  const areaPath = `M ${xOf(0)},${yOf(0)} L ${linePts} L ${xOf(n-1)},${yOf(0)} Z`;
+
+  // Y-axis ticks
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+    v: max * t,
+    y: yOf(max * t),
+    label: max * t >= 1000 ? `$${(max * t / 1000).toFixed(1)}k` : `$${fmt2(max * t)}`,
+  }));
+
+  const hovered = hover !== null ? data[hover] : null;
+  const tooltipX = hover !== null ? xOf(hover) : 0;
+  const tooltipY = hover !== null ? yOf(data[hover].spend) : 0;
+  const tipLeft = tooltipX > W * 0.75;
+
   return (
-    <div style={{position:"relative",width:"100%",overflowX:"auto"}}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",minWidth:Math.max(400,data.length*18),height:150,display:"block"}} preserveAspectRatio="none">
-        {ticks.map((t,i)=>(
+    <div style={{ position: "relative", width: "100%", overflowX: "auto" }}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ width: "100%", minWidth: 400, height: 180, display: "block", overflow: "visible" }}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#00e5b4" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#00e5b4" stopOpacity="0.01" />
+          </linearGradient>
+          <clipPath id="chartClip">
+            <rect
+              x={PAD.left} y={PAD.top}
+              width={ready ? iW : 0} height={iH}
+              style={{ transition: "width 0.9s cubic-bezier(.4,0,.2,1)" }}
+            />
+          </clipPath>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2.5" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        {/* Grid lines */}
+        {ticks.map((t, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={t.y} x2={W-PAD.right} y2={t.y} stroke="#1e2535" strokeWidth=".4"/>
-            <text x={PAD.left-2} y={t.y+1.2} textAnchor="end" fontSize="3" fill="#64748b">{t.label}</text>
+            <line x1={PAD.left} y1={t.y} x2={W - PAD.right} y2={t.y}
+              stroke={i === 0 ? "#2a3347" : "#1a2235"} strokeWidth={i === 0 ? 1 : 0.5} strokeDasharray={i > 0 ? "3,4" : "0"} />
+            <text x={PAD.left - 6} y={t.y + 4} textAnchor="end" fontSize="10" fill="#475569" fontFamily="monospace">{t.label}</text>
           </g>
         ))}
-        {data.map((d,i)=>{
-          const bh=Math.max(.4,(d.spend/max)*iH);
-          const x=PAD.left+i*bW+gap/2, y=PAD.top+iH-bh;
-          const isH=hover===i;
+
+        {/* Area fill */}
+        <path d={areaPath} fill="url(#spendGrad)" clipPath="url(#chartClip)" />
+
+        {/* Line */}
+        <path d={linePath} fill="none" stroke="#00e5b4" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+          clipPath="url(#chartClip)" filter="url(#glow)"
+          style={{ transition: "opacity .3s" }} />
+
+        {/* X-axis labels */}
+        {data.map((d, i) => {
+          const show = n <= 14 || i % Math.ceil(n / 12) === 0;
+          if (!show) return null;
           return (
-            <g key={i}>
-              <rect x={x} y={y} width={bW-gap} height={bh}
-                fill={isH?"var(--accent)":"rgba(0,229,180,.45)"} rx=".6"
-                onMouseEnter={()=>setHover(i)} onMouseLeave={()=>setHover(null)}
-                style={{cursor:"pointer",transition:"fill .1s"}}
-              />
-              {i%Math.ceil(data.length/10)===0&&(
-                <text x={x+(bW-gap)/2} y={H-PAD.bottom+4} textAnchor="middle" fontSize="2.8" fill="#64748b"
-                  transform={`rotate(-35,${x+(bW-gap)/2},${H-PAD.bottom+4})`}>{d.date.slice(5)}</text>
-              )}
-              {isH&&(
-                <g>
-                  <rect x={Math.min(x-8,W-PAD.right-26)} y={y-11} width={26} height={9} rx="1.2" fill="#0f1219" stroke="#1e2535" strokeWidth=".4"/>
-                  <text x={Math.min(x-8,W-PAD.right-26)+13} y={y-5} textAnchor="middle" fontSize="3" fill="var(--accent)" fontWeight="bold">${fmt2(d.spend)}</text>
-                  <text x={Math.min(x-8,W-PAD.right-26)+13} y={y-1.5} textAnchor="middle" fontSize="2.4" fill="#64748b">{d.date.slice(5)}</text>
-                </g>
-              )}
-            </g>
+            <text key={i} x={xOf(i)} y={H - 8} textAnchor="middle" fontSize="9.5" fill="#475569"
+              transform={`rotate(-35,${xOf(i)},${H - 8})`}>
+              {d.date.slice(5)}
+            </text>
           );
         })}
+
+        {/* Hover areas + dots */}
+        {data.map((d, i) => (
+          <g key={i}>
+            <rect x={xOf(i) - bW / 2} y={PAD.top} width={bW} height={iH}
+              fill="transparent" style={{ cursor: "crosshair" }}
+              onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} />
+            {hover === i && (
+              <>
+                <line x1={xOf(i)} y1={PAD.top} x2={xOf(i)} y2={PAD.top + iH}
+                  stroke="#00e5b4" strokeWidth="0.8" strokeDasharray="3,3" strokeOpacity="0.5" />
+                <circle cx={xOf(i)} cy={yOf(d.spend)} r="5"
+                  fill="#00e5b4" stroke="#0b0e16" strokeWidth="2" filter="url(#glow)" />
+              </>
+            )}
+          </g>
+        ))}
+
+        {/* Tooltip */}
+        {hovered && (
+          <g transform={`translate(${tipLeft ? tooltipX - 86 : tooltipX + 8},${Math.max(PAD.top, tooltipY - 28)})`}>
+            <rect width="78" height="34" rx="6" fill="#0f1623" stroke="#00e5b4" strokeWidth="0.8" strokeOpacity="0.6" />
+            <text x="39" y="13" textAnchor="middle" fontSize="11" fill="#00e5b4" fontWeight="bold" fontFamily="monospace">
+              ${fmt2(hovered.spend)}
+            </text>
+            <text x="39" y="26" textAnchor="middle" fontSize="9" fill="#64748b">{hovered.date}</text>
+          </g>
+        )}
       </svg>
     </div>
   );
