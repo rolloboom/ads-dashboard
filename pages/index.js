@@ -114,17 +114,40 @@ export default function Dashboard() {
         if (!map[key] || ts > map[key].ts) map[key] = { row, ts };
       });
       setRows(Object.values(map).map(x => x.row));
+
       // Merge sheet labels into state (sheet wins — shared between users)
-      if (jl.labels && Object.keys(jl.labels).length > 0) {
-        setLabels(prev => {
-          const next = { ...prev };
-          Object.entries(jl.labels).forEach(([key, val]) => {
+      const sheetLabels = (jl.labels && Object.keys(jl.labels).length > 0) ? jl.labels : null;
+
+      // Register new known accounts (batch sync to Sheets)
+      const allCompanies = [...new Set(
+        allRows.map(r => String(r[C.company])).filter(c => c && c !== "Компанія")
+      )];
+
+      setLabels(prev => {
+        const next = { ...prev };
+        // 1. Merge sheet labels
+        if (sheetLabels) {
+          Object.entries(sheetLabels).forEach(([key, val]) => {
             next[key] = { ...(next[key]||{}), ...val };
           });
-          localStorage.setItem("ads_labels", JSON.stringify(next));
-          return next;
+        }
+        // 2. Mark all seen accounts as known (locally)
+        const newAccounts = allCompanies.filter(c => !next[c]?.known);
+        newAccounts.forEach(c => {
+          next[c] = { ...(next[c]||{}), known: "1" };
         });
-      }
+        localStorage.setItem("ads_labels", JSON.stringify(next));
+        // 3. Persist new known accounts to Sheets (batch)
+        if (newAccounts.length > 0) {
+          fetch("/api/labels", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "syncKnown", keys: newAccounts }),
+          }).catch(() => {});
+        }
+        return next;
+      });
+
       setUpdated(new Date().toLocaleTimeString("uk-UA"));
     } catch(e) { setError(e.message); }
     finally    { setLoading(false); }
@@ -216,8 +239,20 @@ export default function Dashboard() {
       list.sort((a,b) => a.name.localeCompare(b.name));
     }
 
+    // Add known accounts that have no data in current filter period
+    // (e.g. new day with no rows yet, or account with no data in date range)
+    Object.keys(labels).forEach(name => {
+      const lbl = labels[name];
+      if (!lbl?.known) return;          // not a known account
+      if (lbl?.deleted === "1") return; // deleted
+      if (lbl?.manualBan === "1") return; // in ban tab
+      if (map[name]) return;            // already in list (has rows)
+      if (accountStatus[name] === "banned") return; // auto-banned → ban tab
+      list.push({ name, displayName: lbl.name || name, rows: [], isEmpty: true });
+    });
+
     return list;
-  }, [filteredForTable, sortCol, sortDir, tab]);
+  }, [filteredForTable, sortCol, sortDir, tab, labels, accountStatus]);
 
   // KPI yesterday
   const kpiY = useMemo(() => {
@@ -333,11 +368,13 @@ export default function Dashboard() {
     return result;
   }, [rawRows]);
 
-  // ── Banned accounts: auto (48h+ no data) OR manually banned
+  // ── Banned accounts: auto (48h+ no data) OR manually banned (excluding deleted)
   const bannedGroups = useMemo(() => {
     const autoBanned   = new Set(Object.entries(accountStatus).filter(([,v])=>v==="banned").map(([k])=>k));
     const manualBanned = new Set(Object.keys(labels).filter(k=>labels[k]?.manualBan==="1"));
     const allBanned    = new Set([...autoBanned, ...manualBanned]);
+    // Remove deleted accounts from ban tab
+    Object.keys(labels).filter(k=>labels[k]?.deleted==="1").forEach(k=>allBanned.delete(k));
     if (allBanned.size === 0) return [];
 
     const latest = {};
@@ -640,6 +677,11 @@ export default function Dashboard() {
                               title="Повернути в основну таблицю"
                               style={{background:"rgba(16,185,129,.15)",color:"var(--green)",border:"1px solid rgba(16,185,129,.3)",borderRadius:5,padding:"1px 7px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
                             >↩ Розбанити</button>
+                            <button
+                              onClick={()=>{ if(window.confirm(`Видалити акаунт "${labels[company]?.name||company}" назавжди?`)){ setLabel(company,"deleted","1"); setLabel(company,"manualBan",""); } }}
+                              title="Видалити назавжди (не відображатиметься більше)"
+                              style={{background:"rgba(239,68,68,.12)",color:"var(--red)",border:"1px solid rgba(239,68,68,.3)",borderRadius:5,padding:"1px 7px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+                            >🗑 Видалити</button>
                           </div>
                         </td>
                         <td style={S.td}><span style={{color:"var(--muted)",fontSize:12}}>{lastSeen}</span></td>
@@ -747,7 +789,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {groups.filter(g=>accountStatus[g.name]!=="banned" && labels[g.name]?.manualBan!=="1").map(g=>(
+                {groups.filter(g=>accountStatus[g.name]!=="banned" && labels[g.name]?.manualBan!=="1" && labels[g.name]?.deleted!=="1").map(g=>(
                   <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
                     collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
                     colCount={COLS.length} accSt={accountStatus[g.name]||"ok"} />

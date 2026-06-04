@@ -16,7 +16,6 @@ async function getAccessToken() {
   try { key = JSON.parse(raw); }
   catch { throw new Error("GOOGLE_SERVICE_ACCOUNT is not valid JSON"); }
 
-  // Fix escaped newlines that Vercel sometimes stores
   const privateKey = (key.private_key || "").replace(/\\n/g, "\n");
 
   const now     = Math.floor(Date.now() / 1000);
@@ -53,25 +52,24 @@ async function ensureLabelsTab(token) {
   const exists = (meta.sheets || []).some(s => s.properties.title === LABELS_TAB);
   if (exists) return;
 
-  // Create the sheet tab
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
     method: "POST",
     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title: LABELS_TAB } } }] }),
   });
 
-  // Write header row
+  // Write header row: A=AccountKey B=Name C=Comment D=Instal E=UpdatedAt F=ManualBan G=Known H=Deleted
   await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A1:F1")}?valueInputOption=RAW`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A1:H1")}?valueInputOption=RAW`,
     {
       method: "PUT",
       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ values: [["AccountKey","Name","Comment","Instal","UpdatedAt","ManualBan"]] }),
+      body: JSON.stringify({ values: [["AccountKey","Name","Comment","Instal","UpdatedAt","ManualBan","Known","Deleted"]] }),
     }
   );
 }
 
-// ── Read Labels tab → { [key]: { name, comment, instal } } ──────────────────
+// ── Read Labels tab ──────────────────────────────────────────────────────────
 async function readLabels() {
   const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
   if (!apiKey) return {};
@@ -89,6 +87,8 @@ async function readLabels() {
       comment:   row[2] || "",
       instal:    row[3] || "",
       manualBan: row[5] || "",
+      known:     row[6] || "",
+      deleted:   row[7] || "",
     };
   });
   return result;
@@ -99,34 +99,32 @@ async function writeLabel(key, field, value) {
   const token = await getAccessToken();
   await ensureLabelsTab(token);
 
-  // Read current rows
   const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
   const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB)}?key=${apiKey}`;
   const gr  = await fetch(getUrl);
   const gj  = await gr.json();
-  const rows = gj.values || [["AccountKey","Name","Comment","Instal","UpdatedAt"]];
+  const rows = gj.values || [["AccountKey","Name","Comment","Instal","UpdatedAt","ManualBan","Known","Deleted"]];
 
-  // Find existing row index (1-based, skip header)
   let rowIdx = -1;
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]) === key) { rowIdx = i + 1; break; }
   }
 
-  // Merge with existing values
   const existing = rowIdx > 0 ? rows[rowIdx - 1] : [];
   const cur = {
     name:      existing[1] || "",
     comment:   existing[2] || "",
     instal:    existing[3] || "",
     manualBan: existing[5] || "",
+    known:     existing[6] || "",
+    deleted:   existing[7] || "",
   };
   cur[field] = value;
 
-  const rowValues = [[key, cur.name, cur.comment, cur.instal, new Date().toISOString(), cur.manualBan]];
+  const rowValues = [[key, cur.name, cur.comment, cur.instal, new Date().toISOString(), cur.manualBan, cur.known, cur.deleted]];
 
   if (rowIdx > 0) {
-    // Update existing row
-    const range = `${LABELS_TAB}!A${rowIdx}:F${rowIdx}`;
+    const range = `${LABELS_TAB}!A${rowIdx}:H${rowIdx}`;
     await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
       {
@@ -136,13 +134,80 @@ async function writeLabel(key, field, value) {
       }
     );
   } else {
-    // Append new row
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A:F")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A:H")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ values: rowValues }),
+      }
+    );
+  }
+}
+
+// ── Batch write "known" for multiple accounts at once ────────────────────────
+async function batchMarkKnown(keys) {
+  if (!keys || keys.length === 0) return;
+  const token = await getAccessToken();
+  await ensureLabelsTab(token);
+
+  const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
+  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB)}?key=${apiKey}`;
+  const gr  = await fetch(getUrl);
+  const gj  = await gr.json();
+  const rows = gj.values || [["AccountKey","Name","Comment","Instal","UpdatedAt","ManualBan","Known","Deleted"]];
+
+  // Build index of existing rows
+  const idxMap = {};
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0]) idxMap[String(rows[i][0])] = i + 1;
+  }
+
+  const updates = [];
+  const appends = [];
+
+  keys.forEach(key => {
+    if (idxMap[key]) {
+      const existing = rows[idxMap[key] - 1];
+      if (existing[6] === "1") return; // already known, skip
+      const cur = {
+        name:      existing[1] || "",
+        comment:   existing[2] || "",
+        instal:    existing[3] || "",
+        manualBan: existing[5] || "",
+        known:     "1",
+        deleted:   existing[7] || "",
+      };
+      updates.push({ rowIdx: idxMap[key], values: [key, cur.name, cur.comment, cur.instal, new Date().toISOString(), cur.manualBan, cur.known, cur.deleted] });
+    } else {
+      appends.push([key, "", "", "", new Date().toISOString(), "", "1", ""]);
+    }
+  });
+
+  // Batch update existing rows
+  if (updates.length > 0) {
+    const data = updates.map(u => ({
+      range: `${LABELS_TAB}!A${u.rowIdx}:H${u.rowIdx}`,
+      values: [u.values],
+    }));
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
+      {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ valueInputOption: "RAW", data }),
+      }
+    );
+  }
+
+  // Append new rows one by one (Sheets API append doesn't support multi-row well in all cases)
+  for (const rowValues of appends) {
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A:H")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values: [rowValues] }),
       }
     );
   }
@@ -163,7 +228,20 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "POST") {
-    const { key, field, value } = req.body || {};
+    const { key, field, value, action, keys } = req.body || {};
+
+    // Batch mark known accounts
+    if (action === "syncKnown") {
+      if (!Array.isArray(keys)) return res.status(400).json({ error: "keys array required" });
+      try {
+        await batchMarkKnown(keys);
+        return res.status(200).json({ ok: true });
+      } catch (e) {
+        console.error("POST /api/labels syncKnown error:", e.message);
+        return res.status(200).json({ ok: false, error: e.message });
+      }
+    }
+
     if (!key || !field) return res.status(400).json({ error: "key and field required" });
     try {
       await writeLabel(key, field, value || "");
