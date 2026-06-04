@@ -296,6 +296,14 @@ export default function Dashboard() {
       if (now - ts >= THREE_H && ts > d.anchorTs) { d.anchorTs = ts; d.anchorImpT = ni(row[C.impT]); }
     });
 
+    // Step 1b: track everHadImp per company across ALL rawRows
+    const everHadImp = {};
+    rawRows.forEach(row => {
+      const company = String(row[C.company]);
+      if (!company || company === "Компанія") return;
+      if (ni(row[C.impY]) > 0 || ni(row[C.impT]) > 0) everHadImp[company] = true;
+    });
+
     // Step 2: aggregate per company — sum impT across all campaigns
     const byCompany = {};
     Object.values(perCamp).forEach(d => {
@@ -314,9 +322,9 @@ export default function Dashboard() {
         result[company] = "banned";  // → БАН tab (2+ days without data)
       } else if (now - v.lastTs > THREE_H) {
         result[company] = "stale";   // RED in main table (3h-48h)
-      } else if (v.lastImpT === 0) {
-        result[company] = "zero";    // BLUE — no impressions at all today
-      } else if (v.hasAnchor && (v.lastImpT - v.anchorImpT) < 100) {
+      } else if (!everHadImp[company]) {
+        result[company] = "zero";    // BLUE — never had any impressions ever
+      } else if ((v.lastImpT - v.anchorImpT) < 100) {
         result[company] = "no_imp";  // YELLOW — less than 100 new impressions in 3h
       } else {
         result[company] = "ok";      // GREEN — traffic growing
