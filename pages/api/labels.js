@@ -62,11 +62,11 @@ async function ensureLabelsTab(token) {
 
   // Write header row
   await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A1:E1")}?valueInputOption=RAW`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A1:F1")}?valueInputOption=RAW`,
     {
       method: "PUT",
       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ values: [["AccountKey","Name","Comment","Instal","UpdatedAt"]] }),
+      body: JSON.stringify({ values: [["AccountKey","Name","Comment","Instal","UpdatedAt","ManualBan"]] }),
     }
   );
 }
@@ -85,9 +85,10 @@ async function readLabels() {
   rows.forEach(row => {
     if (!row[0]) return;
     result[String(row[0])] = {
-      name:    row[1] || "",
-      comment: row[2] || "",
-      instal:  row[3] || "",
+      name:      row[1] || "",
+      comment:   row[2] || "",
+      instal:    row[3] || "",
+      manualBan: row[5] || "",
     };
   });
   return result;
@@ -114,17 +115,18 @@ async function writeLabel(key, field, value) {
   // Merge with existing values
   const existing = rowIdx > 0 ? rows[rowIdx - 1] : [];
   const cur = {
-    name:    existing[1] || "",
-    comment: existing[2] || "",
-    instal:  existing[3] || "",
+    name:      existing[1] || "",
+    comment:   existing[2] || "",
+    instal:    existing[3] || "",
+    manualBan: existing[5] || "",
   };
   cur[field] = value;
 
-  const rowValues = [[key, cur.name, cur.comment, cur.instal, new Date().toISOString()]];
+  const rowValues = [[key, cur.name, cur.comment, cur.instal, new Date().toISOString(), cur.manualBan]];
 
   if (rowIdx > 0) {
     // Update existing row
-    const range = `${LABELS_TAB}!A${rowIdx}:E${rowIdx}`;
+    const range = `${LABELS_TAB}!A${rowIdx}:F${rowIdx}`;
     await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
       {
@@ -136,7 +138,7 @@ async function writeLabel(key, field, value) {
   } else {
     // Append new row
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A:E")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(LABELS_TAB + "!A:F")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
