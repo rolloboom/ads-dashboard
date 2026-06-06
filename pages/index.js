@@ -194,9 +194,17 @@ export default function Dashboard() {
   , [filtered]);
 
   const groups = useMemo(() => {
+    // For today/yesterday tabs — only include accounts with fresh data
+    const todayStr     = fmtDate(0);
+    const yesterdayStr = fmtDate(-1);
+
     const map = {};
     filteredForTable.forEach(r => {
-      const key = String(r[C.company]||"—");
+      const key     = String(r[C.company]||"—");
+      const rowDate = String(r[C.date]||"").slice(0,10);
+      // Skip stale rows: "today" tab needs today's row, "yesterday" needs yesterday or today
+      if (tab === "today"     && rowDate < todayStr)     return;
+      if (tab === "yesterday" && rowDate < yesterdayStr) return;
       if (!map[key]) map[key] = [];
       map[key].push(r);
     });
