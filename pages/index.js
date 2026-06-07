@@ -192,6 +192,87 @@ export default function Dashboard() {
     filtered.filter(x => !String(x[C.campaign]).toLowerCase().includes("video views"))
   , [filtered]);
 
+  // ── Account status (MUST be before groups to avoid TDZ) ──────────────────────
+  const accountStatus = useMemo(() => {
+    const now     = Date.now();
+    const THREE_H = 3 * 60 * 60 * 1000;
+    const perCamp = {};
+    rawRows.forEach(row => {
+      const company  = String(row[C.company]);
+      const campaign = String(row[C.campaign]);
+      if (!company || company === "Компанія") return;
+      const dateStr = String(row[C.date]).slice(0, 10);
+      const timeStr = String(row[C.time] || "00:00:00");
+      const ts = new Date(dateStr + "T" + timeStr).getTime();
+      if (isNaN(ts)) return;
+      const key = company + "||" + campaign;
+      if (!perCamp[key]) perCamp[key] = { company, lastTs:0, lastImpT:0, anchorTs:0, anchorImpT:null };
+      const d = perCamp[key];
+      if (ts > d.lastTs)  { d.lastTs = ts; d.lastImpT = ni(row[C.impT]); }
+      if (now - ts >= THREE_H && ts > d.anchorTs) { d.anchorTs = ts; d.anchorImpT = ni(row[C.impT]); }
+    });
+    const everHadImp = {};
+    rawRows.forEach(row => {
+      const company = String(row[C.company]);
+      if (!company || company === "Компанія") return;
+      if (ni(row[C.impY]) > 0 || ni(row[C.impT]) > 0) everHadImp[company] = true;
+    });
+    const byCompany = {};
+    Object.values(perCamp).forEach(d => {
+      if (!byCompany[d.company]) byCompany[d.company] = { lastTs:0, lastImpT:0, anchorImpT:0, hasAnchor:false };
+      const c = byCompany[d.company];
+      if (d.lastTs > c.lastTs) c.lastTs = d.lastTs;
+      c.lastImpT += d.lastImpT;
+      if (d.anchorImpT !== null) { c.anchorImpT += d.anchorImpT; c.hasAnchor = true; }
+    });
+    const TWO_DAYS = 48 * 60 * 60 * 1000;
+    const result = {};
+    Object.entries(byCompany).forEach(([company, v]) => {
+      if (now - v.lastTs > TWO_DAYS)    result[company] = "banned";
+      else if (now - v.lastTs > THREE_H) result[company] = "stale";
+      else if (!everHadImp[company])     result[company] = "zero";
+      else if ((v.lastImpT - v.anchorImpT) < 100) result[company] = "no_imp";
+      else                               result[company] = "ok";
+    });
+    return result;
+  }, [rawRows]);
+
+  // ── Banned accounts (MUST be before tableGroups) ──────────────────────────────
+  const bannedGroups = useMemo(() => {
+    const todayStr     = fmtDate(0);
+    const yesterdayStr = fmtDate(-1);
+    const autoBanned   = new Set(Object.entries(accountStatus).filter(([,v])=>v==="banned").map(([k])=>k));
+    const manualBanned = new Set(Object.keys(labels).filter(k => {
+      const banVal = labels[k]?.manualBan;
+      if (!banVal || banVal === "") return false;
+      const banDate = banVal.slice(0,10);
+      if (banDate === "1" || (banDate < yesterdayStr)) return true;
+      return false;
+    }));
+    const allBanned = new Set([...autoBanned, ...manualBanned]);
+    Object.keys(labels).filter(k=>labels[k]?.deleted==="1").forEach(k=>allBanned.delete(k));
+    if (allBanned.size === 0) return [];
+    const latest = {};
+    rawRows.forEach(row => {
+      const company = String(row[C.company]);
+      if (!allBanned.has(company)) return;
+      const dateStr = String(row[C.date]).slice(0,10);
+      const timeStr = String(row[C.time]||"00:00:00");
+      const ts = new Date(dateStr+"T"+timeStr).getTime();
+      if (isNaN(ts)) return;
+      if (!latest[company] || ts > latest[company].ts) latest[company] = { row, ts };
+    });
+    manualBanned.forEach(company => {
+      if (!latest[company]) latest[company] = { row: [], ts: 0 };
+    });
+    return Object.entries(latest).map(([company, {row, ts}]) => ({
+      company,
+      lastSeen: ts > 0 ? new Date(ts).toLocaleString("uk-UA") : "—",
+      lastTs: ts, row,
+      isManual: manualBanned.has(company),
+    })).sort((a,b) => b.lastTs - a.lastTs);
+  }, [rawRows, accountStatus, labels]);
+
   const groups = useMemo(() => {
     // For today/yesterday tabs — only include accounts with fresh data
     const todayStr     = fmtDate(0);
@@ -314,111 +395,7 @@ export default function Dashboard() {
     return Object.entries(byDate).sort((a,b)=>a[0]<b[0]?-1:1).slice(-30).map(([date,spend])=>({date,spend}));
   }, [rawRows, tab]);
 
-  // Staleness / traffic-stop detection per account
-  const accountStatus = useMemo(() => {
-    const now     = Date.now();
-    const THREE_H = 3 * 60 * 60 * 1000;
-
-    // Step 1: per (company||campaign) — find latest row and anchor row (≥3h old)
-    const perCamp = {};
-    rawRows.forEach(row => {
-      const company  = String(row[C.company]);
-      const campaign = String(row[C.campaign]);
-      if (!company || company === "Компанія") return;
-      const dateStr = String(row[C.date]).slice(0, 10);
-      const timeStr = String(row[C.time] || "00:00:00");
-      const ts = new Date(dateStr + "T" + timeStr).getTime();
-      if (isNaN(ts)) return;
-
-      const key = company + "||" + campaign;
-      if (!perCamp[key]) perCamp[key] = { company, lastTs:0, lastImpT:0, anchorTs:0, anchorImpT:null };
-      const d = perCamp[key];
-
-      if (ts > d.lastTs)  { d.lastTs = ts; d.lastImpT = ni(row[C.impT]); }
-      if (now - ts >= THREE_H && ts > d.anchorTs) { d.anchorTs = ts; d.anchorImpT = ni(row[C.impT]); }
-    });
-
-    // Step 1b: track everHadImp per company across ALL rawRows
-    const everHadImp = {};
-    rawRows.forEach(row => {
-      const company = String(row[C.company]);
-      if (!company || company === "Компанія") return;
-      if (ni(row[C.impY]) > 0 || ni(row[C.impT]) > 0) everHadImp[company] = true;
-    });
-
-    // Step 2: aggregate per company — sum impT across all campaigns
-    const byCompany = {};
-    Object.values(perCamp).forEach(d => {
-      if (!byCompany[d.company]) byCompany[d.company] = { lastTs:0, lastImpT:0, anchorImpT:0, hasAnchor:false };
-      const c = byCompany[d.company];
-      if (d.lastTs > c.lastTs) c.lastTs = d.lastTs;
-      c.lastImpT += d.lastImpT;
-      if (d.anchorImpT !== null) { c.anchorImpT += d.anchorImpT; c.hasAnchor = true; }
-    });
-
-    // Step 3: decide status per company
-    const TWO_DAYS = 48 * 60 * 60 * 1000;
-    const result = {};
-    Object.entries(byCompany).forEach(([company, v]) => {
-      if (now - v.lastTs > TWO_DAYS) {
-        result[company] = "banned";  // → БАН tab (2+ days without data)
-      } else if (now - v.lastTs > THREE_H) {
-        result[company] = "stale";   // RED in main table (3h-48h)
-      } else if (!everHadImp[company]) {
-        result[company] = "zero";    // BLUE — never had any impressions ever
-      } else if ((v.lastImpT - v.anchorImpT) < 100) {
-        result[company] = "no_imp";  // YELLOW — less than 100 new impressions in 3h
-      } else {
-        result[company] = "ok";      // GREEN — traffic growing
-      }
-    });
-    return result;
-  }, [rawRows]);
-
-  // ── Banned accounts: auto (48h+ no data) OR manually banned 2+ days ago (excluding deleted)
-  const bannedGroups = useMemo(() => {
-    const todayStr     = fmtDate(0);
-    const yesterdayStr = fmtDate(-1);
-    const autoBanned   = new Set(Object.entries(accountStatus).filter(([,v])=>v==="banned").map(([k])=>k));
-    // Manual ban only goes to ban tab if ban date is before yesterday (3rd day+)
-    const manualBanned = new Set(Object.keys(labels).filter(k => {
-      const banVal = labels[k]?.manualBan;
-      if (!banVal || banVal === "") return false;
-      const banDate = banVal.slice(0,10);
-      // If stored as "1" (legacy) — treat as old ban → go to ban tab
-      if (banDate === "1" || (banDate < yesterdayStr)) return true;
-      return false;
-    }));
-    const allBanned    = new Set([...autoBanned, ...manualBanned]);
-    // Remove deleted accounts from ban tab
-    Object.keys(labels).filter(k=>labels[k]?.deleted==="1").forEach(k=>allBanned.delete(k));
-    if (allBanned.size === 0) return [];
-
-    const latest = {};
-    rawRows.forEach(row => {
-      const company = String(row[C.company]);
-      if (!allBanned.has(company)) return;
-      const dateStr = String(row[C.date]).slice(0,10);
-      const timeStr = String(row[C.time]||"00:00:00");
-      const ts = new Date(dateStr+"T"+timeStr).getTime();
-      if (isNaN(ts)) return;
-      if (!latest[company] || ts > latest[company].ts) latest[company] = { row, ts };
-    });
-    // Include manual bans even if no rows found
-    manualBanned.forEach(company => {
-      if (!latest[company]) latest[company] = { row: [], ts: 0 };
-    });
-
-    return Object.entries(latest).map(([company, {row, ts}]) => ({
-      company,
-      lastSeen: ts > 0 ? new Date(ts).toLocaleString("uk-UA") : "—",
-      lastTs: ts,
-      row,
-      isManual: manualBanned.has(company),
-    })).sort((a,b) => b.lastTs - a.lastTs);
-  }, [rawRows, accountStatus, labels]);
-
-  // ── Table groups filtered by tab rules (MUST be after bannedGroups to avoid TDZ)
+  // ── Table groups filtered by tab rules
   const tableGroups = useMemo(() => {
     let list = groups.filter(g => {
       if (accountStatus[g.name] === "banned") return false;
