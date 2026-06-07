@@ -699,7 +699,11 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bannedGroups.map(({company, lastSeen, lastTs, row, isManual})=>(
+                    {bannedGroups.map(({company, lastSeen, lastTs, row, isManual})=>{
+                      // spendY/impY are only accurate if row is from today or yesterday
+                      const rowDateStr = lastTs > 0 ? new Date(lastTs).toISOString().slice(0,10) : "";
+                      const isRecentRow = rowDateStr === fmtDate(0) || rowDateStr === fmtDate(-1);
+                      return (
                       <tr key={company} style={{...S.tr, background:"rgba(239,68,68,.06)"}}>
                         <td style={S.td}>
                           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
@@ -731,15 +735,16 @@ export default function Dashboard() {
                         <td style={S.td}><span style={{color:"var(--muted)",fontSize:12}}>{lastSeen}</span></td>
                         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500}}>{row[C.domain]||"—"}</span></td>
                         <td style={S.td}><span style={{color:"var(--muted2)"}}>{row[C.geo]||"—"}</span></td>
-                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{n(row[C.spendY])>0?"$"+fmt2(row[C.spendY]):"—"}</span></td>
-                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{fmtN(row[C.impY])}</span></td>
-                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--yellow)"}}>{ni(row[C.conv])>0?fmtN(row[C.conv]):"—"}</span></td>
+                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{isRecentRow && n(row[C.spendY])>0?"$"+fmt2(row[C.spendY]):"—"}</span></td>
+                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{isRecentRow?fmtN(row[C.impY]):"—"}</span></td>
+                        <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--yellow)"}}>{isRecentRow && ni(row[C.conv])>0?fmtN(row[C.conv]):"—"}</span></td>
                         <td style={S.td}><span style={{display:"block",textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--muted2)"}}>{n(row[C.monthSpend])>0?"$"+fmt2(row[C.monthSpend]):"—"}</span></td>
                         <td style={{...S.td,minWidth:180}} onClick={e=>e.stopPropagation()}>
                           <EditableCell value={labels[company]?.comment||""} placeholder="+ коментар…" onSave={v=>setLabel(company,"comment",v)} muted />
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
