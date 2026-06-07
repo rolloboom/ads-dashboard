@@ -66,7 +66,6 @@ export default function Dashboard() {
   const [error,    setError]    = useState(null);
   const [updated,  setUpdated]  = useState(null);
   const [tab,      setTab]      = useState("today"); // "today" | "yesterday" | "week"
-  const [collapsed,setCollapsed]= useState(null); // null = collapse all by default
 
   // Custom labels: { [accountId]: { name: string, comment: string } }
   const [labels, setLabels] = useState(() => {
@@ -527,21 +526,6 @@ export default function Dashboard() {
     };
   }, [weekGroups, labels]);
 
-  // null means "all collapsed" — resolved lazily when groups are known
-  const collapsedSet = useMemo(
-    () => collapsed === null ? new Set(groups.map(g=>g.name)) : collapsed,
-    [collapsed, groups]
-  );
-
-  function toggleCollapse(name) {
-    setCollapsed(prev=>{
-      const base = prev === null ? new Set(groups.map(g=>g.name)) : new Set(prev);
-      base.has(name) ? base.delete(name) : base.add(name);
-      return base;
-    });
-  }
-  function collapseAll(){ setCollapsed(null); }
-  function expandAll(){   setCollapsed(new Set()); }
   function handleSort(col){ if(sortCol===col) setSortDir(d=>-d); else{setSortCol(col);setSortDir(-1);} }
   function resetFilters(){
     setDateFrom(fmtDate(-7)); setDateTo(fmtDate(0));
@@ -834,8 +818,6 @@ export default function Dashboard() {
             {loading?"Завантаження…":`${tableGroups.reduce((s,g)=>s+g.rows.length,0)} кампаній · ${tableGroups.length} акаунтів`}
           </span>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button style={S.smallBtn} onClick={expandAll}>Розкрити всі</button>
-            <button style={S.smallBtn} onClick={collapseAll}>Згорнути всі</button>
             <span style={{color:"var(--muted)",fontSize:11}}>↑↓ клік по заголовку</span>
           </div>
         </div>}
@@ -874,7 +856,6 @@ export default function Dashboard() {
                         </tr>
                       )}
                       <AccountGroup group={g} tab={tab} labels={labels} setLabel={setLabel}
-                        collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
                         colCount={COLS.length} accSt={g.isBanned ? "banned_report" : g.isStopped ? "stopped" : (accountStatus[g.name]||"ok")} />
                     </React.Fragment>
                   );
@@ -890,7 +871,7 @@ export default function Dashboard() {
   );
 }
 
-function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLabel, accSt }) {
+function AccountGroup({ group, tab, colCount, labels, setLabel, accSt }) {
   const rows   = group.rows;
   const accountId = group.name; // raw account ID as storage key
   const lbl    = labels?.[accountId] || {};
@@ -916,18 +897,16 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   const geoVal   = rows.map(r=>String(r[C.geo]||"")).find(v=>v&&v!=="—") || "—";
   const domainVal= rows.map(r=>String(r[C.domain]||"")).find(v=>v&&v!=="—") || "—";
 
-  // Arrow toggle cell
+  // Name cell
   const arrowCell = (
-    <td style={{...S.td, paddingLeft:10, whiteSpace:"nowrap", cursor:"pointer", minWidth:160}}>
+    <td style={{...S.td, paddingLeft:10, whiteSpace:"nowrap", minWidth:160}}>
       <div style={{display:"flex",alignItems:"center",gap:6}}>
-        <span style={{fontSize:11,color:"var(--accent)",display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s",flexShrink:0}}>▼</span>
         <EditableCell
           value={lbl.name || ""}
           placeholder={group.displayName}
           onSave={v => setLabel(accountId, "name", v)}
           bold
         />
-        <span style={{fontSize:10,color:"var(--muted)",flexShrink:0}}>{rows.length}</span>
         {isNewLaunch && (
           <span style={{background:"rgba(59,130,246,.2)",color:"var(--blue)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
             🚀 Новий
@@ -1023,7 +1002,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   if (tab==="yesterday") {
     return (
       <>
-        <tr style={{...S.tr, background:rowBg, cursor:"pointer"}} onClick={onToggle}>
+        <tr style={{...S.tr, background:rowBg}}>
           {arrowCell}
           <td style={S.td}></td>{/* крео */}
           <td style={S.td}></td>{/* тип */}
@@ -1049,14 +1028,6 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
           {instalCell}
           {banCell}
         </tr>
-        {!collapsed&&rows.map((row,i)=>(
-          <tr key={i} style={S.tr}>
-            {COLS_YESTERDAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
-            <td style={S.td}></td>{/* comment spacer */}
-            <td style={S.td}></td>{/* instal spacer */}
-            <td style={S.td}></td>{/* ban spacer */}
-          </tr>
-        ))}
       </>
     );
   }
@@ -1064,7 +1035,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   // Summary row for TODAY tab
   return (
     <>
-      <tr style={{...S.tr, background:rowBg, cursor:"pointer"}} onClick={onToggle}>
+      <tr style={{...S.tr, background:rowBg}}>
         {arrowCell}
         <td style={S.td}></td>{/* крео */}
         <td style={S.td}></td>{/* тип */}
@@ -1094,13 +1065,6 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
         {commentCell}
         {banCell}
       </tr>
-      {!collapsed&&rows.map((row,i)=>(
-        <tr key={i} style={S.tr}>
-          {COLS_TODAY.map((c,j)=><td key={j} style={S.td}>{c.render(row)}</td>)}
-          <td style={S.td}></td>{/* comment spacer */}
-          <td style={S.td}></td>{/* ban spacer */}
-        </tr>
-      ))}
     </>
   );
 }
