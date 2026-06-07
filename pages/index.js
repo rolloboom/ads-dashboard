@@ -376,10 +376,20 @@ export default function Dashboard() {
     return result;
   }, [rawRows]);
 
-  // ── Banned accounts: auto (48h+ no data) OR manually banned (excluding deleted)
+  // ── Banned accounts: auto (48h+ no data) OR manually banned 2+ days ago (excluding deleted)
   const bannedGroups = useMemo(() => {
+    const todayStr     = fmtDate(0);
+    const yesterdayStr = fmtDate(-1);
     const autoBanned   = new Set(Object.entries(accountStatus).filter(([,v])=>v==="banned").map(([k])=>k));
-    const manualBanned = new Set(Object.keys(labels).filter(k=>labels[k]?.manualBan==="1"));
+    // Manual ban only goes to ban tab if ban date is before yesterday (3rd day+)
+    const manualBanned = new Set(Object.keys(labels).filter(k => {
+      const banVal = labels[k]?.manualBan;
+      if (!banVal || banVal === "") return false;
+      const banDate = banVal.slice(0,10);
+      // If stored as "1" (legacy) — treat as old ban → go to ban tab
+      if (banDate === "1" || (banDate < yesterdayStr)) return true;
+      return false;
+    }));
     const allBanned    = new Set([...autoBanned, ...manualBanned]);
     // Remove deleted accounts from ban tab
     Object.keys(labels).filter(k=>labels[k]?.deleted==="1").forEach(k=>allBanned.delete(k));
@@ -797,7 +807,16 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {groups.filter(g=>accountStatus[g.name]!=="banned" && labels[g.name]?.manualBan!=="1" && labels[g.name]?.deleted!=="1").map(g=>(
+                {groups.filter(g => {
+                    if (accountStatus[g.name]==="banned") return false;
+                    if (labels[g.name]?.deleted==="1") return false;
+                    const banVal = labels[g.name]?.manualBan;
+                    if (!banVal) return true;
+                    const banDate = banVal.slice(0,10);
+                    // Legacy "1" or old date → goes to ban tab, hide here
+                    if (banDate === "1" || banDate < fmtDate(-1)) return false;
+                    return true; // banned today or yesterday → show in main table
+                  }).map(g=>(
                   <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
                     collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
                     colCount={COLS.length} accSt={accountStatus[g.name]||"ok"} />
@@ -856,6 +875,24 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
             🚀 Новий
           </span>
         )}
+        {(()=>{
+          const banVal = lbl.manualBan;
+          if (!banVal || banVal==="1") return null;
+          const banDate = banVal.slice(0,10);
+          const todayStr = fmtDate(0);
+          const yestStr  = fmtDate(-1);
+          if (banDate === todayStr) return (
+            <span style={{background:"rgba(239,68,68,.2)",color:"var(--red)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
+              🚫 Сьогодні
+            </span>
+          );
+          if (banDate === yestStr) return (
+            <span style={{background:"rgba(239,68,68,.15)",color:"var(--red)",fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
+              🚫 Вчора
+            </span>
+          );
+          return null;
+        })()}
         {accSt==="stale" && (
           <span style={{background:"rgba(239,68,68,.2)",color:"var(--red)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
             🚫 БАН
@@ -871,13 +908,22 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
   );
 
   // Ban button cell (last column, summary rows only)
+  const isBannedRecently = lbl.manualBan && lbl.manualBan !== "1";
   const banCell = (
-    <td style={{...S.td, width:70}} onClick={e=>e.stopPropagation()}>
-      <button
-        onClick={()=>setLabel(accountId,"manualBan","1")}
-        title="Перенести в БАН вручну"
-        style={{background:"rgba(239,68,68,.12)",color:"var(--red)",border:"1px solid rgba(239,68,68,.25)",borderRadius:6,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
-      >В БАН</button>
+    <td style={{...S.td, width:80}} onClick={e=>e.stopPropagation()}>
+      {isBannedRecently ? (
+        <button
+          onClick={()=>setLabel(accountId,"manualBan","")}
+          title="Розбанити"
+          style={{background:"rgba(16,185,129,.12)",color:"var(--green)",border:"1px solid rgba(16,185,129,.25)",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+        >↩ Розбан</button>
+      ) : (
+        <button
+          onClick={()=>setLabel(accountId,"manualBan",fmtDate(0))}
+          title="Перенести в БАН вручну"
+          style={{background:"rgba(239,68,68,.12)",color:"var(--red)",border:"1px solid rgba(239,68,68,.25)",borderRadius:6,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+        >В БАН</button>
+      )}
     </td>
   );
 
