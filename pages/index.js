@@ -262,6 +262,42 @@ export default function Dashboard() {
     return list;
   }, [filteredForTable, sortCol, sortDir, tab, labels, accountStatus]);
 
+  // ── Table groups filtered by tab rules ───────────────────────────────────────
+  const tableGroups = useMemo(() => {
+    // Base filter: remove auto-banned, deleted, old manual-bans
+    let list = groups.filter(g => {
+      if (accountStatus[g.name] === "banned") return false;
+      if (labels[g.name]?.deleted === "1") return false;
+      const banVal  = labels[g.name]?.manualBan;
+      if (!banVal) return true;
+      const banDate = banVal.slice(0, 10);
+      if (banDate === "1" || banDate < fmtDate(-1)) return false;
+      return true;
+    });
+
+    if (tab === "today") {
+      // Only accounts with 100+ impressions today
+      list = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impT]), 0) > 100);
+    }
+
+    if (tab === "yesterday") {
+      // Only accounts with any impressions yesterday
+      list = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impY]), 0) > 0);
+      // Also include banned accounts that had traffic yesterday (for reporting)
+      bannedGroups.forEach(({ company, row }) => {
+        if (labels[company]?.deleted === "1") return;
+        const rowArr = Array.isArray(row) && row.length > 0 ? row : (row && !Array.isArray(row) ? [row] : []);
+        const impY = rowArr.reduce((s, r) => s + ni(r[C.impY]), 0);
+        if (impY <= 0) return;
+        // Don't duplicate if already in list
+        if (list.find(g => g.name === company)) return;
+        list.push({ name: company, displayName: labels[company]?.name || company, rows: rowArr, isBanned: true });
+      });
+    }
+
+    return list;
+  }, [groups, tab, accountStatus, labels, bannedGroups]);
+
   // KPI yesterday
   const kpiY = useMemo(() => {
     const spend  = filtered.reduce((s,r)=>s+n(r[C.spendY]),  0);
@@ -789,7 +825,7 @@ export default function Dashboard() {
         {/* RESULTS BAR */}
         {tab!=="week" && tab!=="banned" && <div style={S.resultsBar}>
           <span style={{color:"var(--muted)",fontSize:12}}>
-            {loading?"Завантаження…":`${filteredForTable.length} кампаній · ${groups.length} акаунтів`}
+            {loading?"Завантаження…":`${tableGroups.reduce((s,g)=>s+g.rows.length,0)} кампаній · ${tableGroups.length} акаунтів`}
           </span>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <button style={S.smallBtn} onClick={expandAll}>Розкрити всі</button>
@@ -817,23 +853,14 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {groups.filter(g => {
-                    if (accountStatus[g.name]==="banned") return false;
-                    if (labels[g.name]?.deleted==="1") return false;
-                    const banVal = labels[g.name]?.manualBan;
-                    if (!banVal) return true;
-                    const banDate = banVal.slice(0,10);
-                    // Legacy "1" or old date → goes to ban tab, hide here
-                    if (banDate === "1" || banDate < fmtDate(-1)) return false;
-                    return true; // banned today or yesterday → show in main table
-                  }).map(g=>(
+                {tableGroups.map(g=>(
                   <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
                     collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
-                    colCount={COLS.length} accSt={accountStatus[g.name]||"ok"} />
+                    colCount={COLS.length} accSt={g.isBanned ? "banned_report" : (accountStatus[g.name]||"ok")} />
                 ))}
               </tbody>
             </table>
-            {!loading&&filtered.length===0&&<div style={S.empty}><div style={{fontSize:40,marginBottom:12}}>🔍</div><div>Нічого не знайдено.</div></div>}
+            {!loading&&tableGroups.length===0&&<div style={S.empty}><div style={{fontSize:40,marginBottom:12}}>🔍</div><div>Нічого не знайдено.</div></div>}
             {loading&&rows.length===0&&<div style={S.empty}><Spinner/><div style={{marginTop:12,color:"var(--muted)"}}>Завантаження…</div></div>}
           </div>
         )}
@@ -903,7 +930,7 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
           );
           return null;
         })()}
-        {accSt==="stale" && (
+        {(accSt==="stale" || accSt==="banned_report") && (
           <span style={{background:"rgba(239,68,68,.2)",color:"var(--red)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
             🚫 БАН
           </span>
