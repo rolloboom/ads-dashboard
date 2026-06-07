@@ -683,13 +683,23 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bannedGroups.map(({company, lastSeen, row, isManual})=>(
+                    {bannedGroups.map(({company, lastSeen, lastTs, row, isManual})=>(
                       <tr key={company} style={{...S.tr, background:"rgba(239,68,68,.06)"}}>
                         <td style={S.td}>
                           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:"var(--red)",boxShadow:"0 0 5px var(--red)",flexShrink:0}}/>
                             <span style={{fontWeight:700,color:"var(--red)"}}>{labels[company]?.name||company}</span>
                             {isManual && <span style={{background:"rgba(239,68,68,.2)",color:"var(--red)",fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:20}}>вручну</span>}
+                            {(()=>{
+                              // For auto-bans: show when account last had data
+                              if (isManual || lastTs <= 0) return null;
+                              const lastDate = new Date(lastTs).toISOString().slice(0,10);
+                              const todayStr = fmtDate(0);
+                              const yestStr  = fmtDate(-1);
+                              if (lastDate === todayStr) return <span style={{background:"rgba(239,68,68,.15)",color:"var(--red)",fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:20}}>Сьогодні</span>;
+                              if (lastDate === yestStr)  return <span style={{background:"rgba(239,68,68,.1)",color:"var(--red)",fontSize:10,fontWeight:500,padding:"1px 6px",borderRadius:20}}>Вчора</span>;
+                              return null;
+                            })()}
                             <button
                               onClick={()=>setLabel(company,"manualBan","")}
                               title="Повернути в основну таблицю"
