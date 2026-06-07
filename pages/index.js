@@ -276,8 +276,14 @@ export default function Dashboard() {
     });
 
     if (tab === "today") {
-      // Only accounts with 100+ impressions today
-      list = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impT]), 0) > 100);
+      // Separate: active (impT > 100) vs stopped today (impY > 0 but impT < 100)
+      const active  = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impT]), 0) > 100);
+      const stopped = list.filter(g => {
+        const impT = g.rows.reduce((s, r) => s + ni(r[C.impT]), 0);
+        const impY = g.rows.reduce((s, r) => s + ni(r[C.impY]), 0);
+        return impT <= 100 && impY > 0;
+      }).map(g => ({ ...g, isStopped: true }));
+      return [...active, ...stopped];
     }
 
     if (tab === "yesterday") {
@@ -853,11 +859,26 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {tableGroups.map(g=>(
-                  <AccountGroup key={g.name} group={g} tab={tab} labels={labels} setLabel={setLabel}
-                    collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
-                    colCount={COLS.length} accSt={g.isBanned ? "banned_report" : (accountStatus[g.name]||"ok")} />
-                ))}
+                {tableGroups.map((g, i) => {
+                  const prevStopped = i > 0 && tableGroups[i-1].isStopped;
+                  const showDivider = tab === "today" && g.isStopped && !prevStopped;
+                  return (
+                    <React.Fragment key={g.name}>
+                      {showDivider && (
+                        <tr>
+                          <td colSpan={COLS.length + 2} style={{padding:"10px 12px 6px", background:"var(--surface)"}}>
+                            <span style={{fontSize:11,fontWeight:700,color:"var(--yellow)",textTransform:"uppercase",letterSpacing:".5px"}}>
+                              ⚠️ Зупинились сьогодні — вчора крутили, зараз немає трафіку
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                      <AccountGroup group={g} tab={tab} labels={labels} setLabel={setLabel}
+                        collapsed={collapsedSet.has(g.name)} onToggle={()=>toggleCollapse(g.name)}
+                        colCount={COLS.length} accSt={g.isBanned ? "banned_report" : g.isStopped ? "stopped" : (accountStatus[g.name]||"ok")} />
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
             {!loading&&tableGroups.length===0&&<div style={S.empty}><div style={{fontSize:40,marginBottom:12}}>🔍</div><div>Нічого не знайдено.</div></div>}
@@ -933,6 +954,11 @@ function AccountGroup({ group, tab, collapsed, onToggle, colCount, labels, setLa
         {(accSt==="stale" || accSt==="banned_report") && (
           <span style={{background:"rgba(239,68,68,.2)",color:"var(--red)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
             🚫 БАН
+          </span>
+        )}
+        {accSt==="stopped" && (
+          <span style={{background:"rgba(245,158,11,.2)",color:"var(--yellow)",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
+            ⛔ Зупинився
           </span>
         )}
         {accSt==="no_imp" && (
