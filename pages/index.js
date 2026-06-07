@@ -261,48 +261,6 @@ export default function Dashboard() {
     return list;
   }, [filteredForTable, sortCol, sortDir, tab, labels, accountStatus]);
 
-  // ── Table groups filtered by tab rules ───────────────────────────────────────
-  const tableGroups = useMemo(() => {
-    // Base filter: remove auto-banned, deleted, old manual-bans
-    let list = groups.filter(g => {
-      if (accountStatus[g.name] === "banned") return false;
-      if (labels[g.name]?.deleted === "1") return false;
-      const banVal  = labels[g.name]?.manualBan;
-      if (!banVal) return true;
-      const banDate = banVal.slice(0, 10);
-      if (banDate === "1" || banDate < fmtDate(-1)) return false;
-      return true;
-    });
-
-    if (tab === "today") {
-      // Separate: active (impT > 100) vs stopped today (impY > 0 but impT < 100)
-      const active  = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impT]), 0) > 100);
-      const stopped = list.filter(g => {
-        const impT = g.rows.reduce((s, r) => s + ni(r[C.impT]), 0);
-        const impY = g.rows.reduce((s, r) => s + ni(r[C.impY]), 0);
-        return impT <= 100 && impY > 0;
-      }).map(g => ({ ...g, isStopped: true }));
-      return [...active, ...stopped];
-    }
-
-    if (tab === "yesterday") {
-      // Only accounts with any impressions yesterday
-      list = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impY]), 0) > 0);
-      // Also include banned accounts that had traffic yesterday (for reporting)
-      bannedGroups.forEach(({ company, row }) => {
-        if (labels[company]?.deleted === "1") return;
-        const rowArr = Array.isArray(row) && row.length > 0 ? row : (row && !Array.isArray(row) ? [row] : []);
-        const impY = rowArr.reduce((s, r) => s + ni(r[C.impY]), 0);
-        if (impY <= 0) return;
-        // Don't duplicate if already in list
-        if (list.find(g => g.name === company)) return;
-        list.push({ name: company, displayName: labels[company]?.name || company, rows: rowArr, isBanned: true });
-      });
-    }
-
-    return list;
-  }, [groups, tab, accountStatus, labels, bannedGroups]);
-
   // KPI yesterday
   const kpiY = useMemo(() => {
     const spend  = filtered.reduce((s,r)=>s+n(r[C.spendY]),  0);
@@ -459,6 +417,43 @@ export default function Dashboard() {
       isManual: manualBanned.has(company),
     })).sort((a,b) => b.lastTs - a.lastTs);
   }, [rawRows, accountStatus, labels]);
+
+  // ── Table groups filtered by tab rules (MUST be after bannedGroups to avoid TDZ)
+  const tableGroups = useMemo(() => {
+    let list = groups.filter(g => {
+      if (accountStatus[g.name] === "banned") return false;
+      if (labels[g.name]?.deleted === "1") return false;
+      const banVal  = labels[g.name]?.manualBan;
+      if (!banVal) return true;
+      const banDate = banVal.slice(0, 10);
+      if (banDate === "1" || banDate < fmtDate(-1)) return false;
+      return true;
+    });
+
+    if (tab === "today") {
+      const active  = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impT]), 0) > 100);
+      const stopped = list.filter(g => {
+        const impT = g.rows.reduce((s, r) => s + ni(r[C.impT]), 0);
+        const impY = g.rows.reduce((s, r) => s + ni(r[C.impY]), 0);
+        return impT <= 100 && impY > 0;
+      }).map(g => ({ ...g, isStopped: true }));
+      return [...active, ...stopped];
+    }
+
+    if (tab === "yesterday") {
+      list = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impY]), 0) > 0);
+      bannedGroups.forEach(({ company, row }) => {
+        if (labels[company]?.deleted === "1") return;
+        const rowArr = Array.isArray(row) && row.length > 0 ? row : (row && !Array.isArray(row) ? [row] : []);
+        const impY = rowArr.reduce((s, r) => s + ni(r[C.impY]), 0);
+        if (impY <= 0) return;
+        if (list.find(g => g.name === company)) return;
+        list.push({ name: company, displayName: labels[company]?.name || company, rows: rowArr, isBanned: true });
+      });
+    }
+
+    return list;
+  }, [groups, tab, accountStatus, labels, bannedGroups]);
 
   // ── 7-day aggregated stats per account
   const weekGroups = useMemo(() => {
