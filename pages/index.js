@@ -897,10 +897,10 @@ function AccountGroup({ group, tab, colCount, labels, setLabel, accSt }) {
   const geoVal   = rows.map(r=>String(r[C.geo]||"")).find(v=>v&&v!=="—") || "—";
   const domainVal= rows.map(r=>String(r[C.domain]||"")).find(v=>v&&v!=="—") || "—";
 
-  // Name cell (no expand/collapse)
-  const [copied, setCopied] = React.useState(false);
+  // Copy account name
+  const [copied, setCopied] = useState(false);
   function copyName() {
-    const txt = accountId; // always copy the raw account ID (company key)
+    const txt = accountId;
     navigator.clipboard.writeText(txt).then(() => { setCopied(true); setTimeout(()=>setCopied(false), 1500); });
   }
   const arrowCell = (
