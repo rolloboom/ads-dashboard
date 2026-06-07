@@ -342,23 +342,30 @@ export default function Dashboard() {
     return list;
   }, [filteredForTable, sortCol, sortDir, tab, labels, accountStatus]);
 
-  // KPI yesterday
+  // KPI yesterday — only rows dated today or yesterday (spendY in today's row = actual yesterday)
   const kpiY = useMemo(() => {
-    const spend  = filtered.reduce((s,r)=>s+n(r[C.spendY]),  0);
-    const imp    = filtered.reduce((s,r)=>s+ni(r[C.impY]),   0);
-    const clicks = filtered.reduce((s,r)=>s+ni(r[C.clicksY]),0);
-    const conv   = filtered.reduce((s,r)=>s+n(r[C.conv]),    0);
-    const pol    = filtered.filter(r=>ni(r[C.policyN])>0).length;
+    const todayStr = fmtDate(0);
+    const yesterdayStr = fmtDate(-1);
+    // Prefer today's rows (spendY = real yesterday); fall back to yesterday's rows
+    const yRows = filteredForTable.filter(r => {
+      const d = String(r[C.date]).slice(0,10);
+      return d === todayStr || d === yesterdayStr;
+    });
+    const spend  = yRows.reduce((s,r)=>s+n(r[C.spendY]),  0);
+    const imp    = yRows.reduce((s,r)=>s+ni(r[C.impY]),   0);
+    const clicks = yRows.reduce((s,r)=>s+ni(r[C.clicksY]),0);
+    const conv   = yRows.reduce((s,r)=>s+n(r[C.conv]),    0);
+    const pol    = yRows.filter(r=>ni(r[C.policyN])>0).length;
     return {
       spend, imp, clicks, conv, pol,
-      total:  filtered.length,
-      active: filtered.filter(r=>String(r[C.status]).includes("крутить")).length,
+      total:  yRows.length,
+      active: yRows.filter(r=>String(r[C.status]).includes("крутить")).length,
       ctr:    imp>0 ? (clicks/imp)*100 : 0,
       cpc:    clicks>0 ? spend/clicks : 0,
       cpm:    imp>0 ? (spend/imp)*1000 : 0,
       cpa:    conv>0 ? spend/conv : 0,
     };
-  }, [filtered]);
+  }, [filtered, filteredForTable]);
 
   // KPI today — only rows dated TODAY (spendT/impT are "today" columns, stale rows would inflate)
   const kpiT = useMemo(() => {
