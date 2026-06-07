@@ -360,9 +360,10 @@ export default function Dashboard() {
     };
   }, [filtered]);
 
-  // KPI today — based on rows with spendT>0 or impT>100 (matches table visible rows)
+  // KPI today — only rows dated TODAY (spendT/impT are "today" columns, stale rows would inflate)
   const kpiT = useMemo(() => {
-    const todayRows = filteredForTable.filter(r => n(r[C.spendT]) > 0 || ni(r[C.impT]) > 100);
+    const todayStr  = fmtDate(0);
+    const todayRows = filteredForTable.filter(r => String(r[C.date]).slice(0,10) === todayStr);
     const spend  = todayRows.reduce((s,r)=>s+n(r[C.spendT]),  0);
     const imp    = todayRows.reduce((s,r)=>s+ni(r[C.impT]),   0);
     const convT  = todayRows.reduce((s,r)=>s+ni(r[C.convT]),  0);
