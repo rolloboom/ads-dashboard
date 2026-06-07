@@ -418,12 +418,14 @@ export default function Dashboard() {
     }
 
     if (tab === "yesterday") {
-      list = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impY]), 0) > 0);
+      // Only accounts with spend >= $1 yesterday
+      list = list.filter(g => g.rows.reduce((s, r) => s + n(r[C.spendY]), 0) >= 1);
+      // Add banned accounts with spend >= $1 yesterday
       bannedGroups.forEach(({ company, row }) => {
         if (labels[company]?.deleted === "1") return;
         const rowArr = Array.isArray(row) && row.length > 0 ? row : (row && !Array.isArray(row) ? [row] : []);
-        const impY = rowArr.reduce((s, r) => s + ni(r[C.impY]), 0);
-        if (impY <= 0) return;
+        const spendY = rowArr.reduce((s, r) => s + n(r[C.spendY]), 0);
+        if (spendY < 1) return;
         if (list.find(g => g.name === company)) return;
         list.push({ name: company, displayName: labels[company]?.name || company, rows: rowArr, isBanned: true });
       });
