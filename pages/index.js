@@ -360,19 +360,20 @@ export default function Dashboard() {
     };
   }, [filtered]);
 
-  // KPI today
+  // KPI today — based on rows with spendT>0 or impT>100 (matches table visible rows)
   const kpiT = useMemo(() => {
-    const spend  = filtered.reduce((s,r)=>s+n(r[C.spendT]),  0);
-    const imp    = filtered.reduce((s,r)=>s+ni(r[C.impT]),   0);
-    const convT  = filtered.reduce((s,r)=>s+ni(r[C.convT]),  0);
-    const month  = filtered.reduce((s,r)=>s+n(r[C.monthSpend]),0);
+    const todayRows = filteredForTable.filter(r => n(r[C.spendT]) > 0 || ni(r[C.impT]) > 100);
+    const spend  = todayRows.reduce((s,r)=>s+n(r[C.spendT]),  0);
+    const imp    = todayRows.reduce((s,r)=>s+ni(r[C.impT]),   0);
+    const convT  = todayRows.reduce((s,r)=>s+ni(r[C.convT]),  0);
+    const month  = filtered.reduce((s,r)=>s+n(r[C.monthSpend]),0); // month stays full
     const pol    = filtered.filter(r=>ni(r[C.policyN])>0).length;
     const active = filtered.filter(r=>String(r[C.status]).includes("крутить")).length;
     const paused = filtered.filter(r=>String(r[C.status]).includes("Пауза")).length;
     const banned = filtered.filter(r=>String(r[C.accStatus]).includes("БАН")).length;
     const payIssue = filtered.filter(r=>String(r[C.payStatus]).includes("Проблема")).length;
     return { spend, imp, convT, month, pol, active, paused, banned, payIssue, total: filtered.length };
-  }, [filtered]);
+  }, [filtered, filteredForTable]);
 
   // Total instal from labels (manual input per account)
   const totalInstal = useMemo(() => {
@@ -408,11 +409,18 @@ export default function Dashboard() {
     });
 
     if (tab === "today") {
-      const active  = list.filter(g => g.rows.reduce((s, r) => s + ni(r[C.impT]), 0) > 100);
+      // Active: has spend today OR 100+ impressions today
+      const active  = list.filter(g => {
+        const spendT = g.rows.reduce((s, r) => s + n(r[C.spendT]), 0);
+        const impT   = g.rows.reduce((s, r) => s + ni(r[C.impT]), 0);
+        return spendT > 0 || impT > 100;
+      });
+      const activeNames = new Set(active.map(g => g.name));
+      // Stopped: had traffic yesterday, no spend and no impressions today
       const stopped = list.filter(g => {
-        const impT = g.rows.reduce((s, r) => s + ni(r[C.impT]), 0);
+        if (activeNames.has(g.name)) return false;
         const impY = g.rows.reduce((s, r) => s + ni(r[C.impY]), 0);
-        return impT <= 100 && impY > 0;
+        return impY > 0;
       }).map(g => ({ ...g, isStopped: true }));
       return [...active, ...stopped];
     }
