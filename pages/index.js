@@ -897,10 +897,20 @@ function AccountGroup({ group, tab, colCount, labels, setLabel, accSt }) {
   const geoVal   = rows.map(r=>String(r[C.geo]||"")).find(v=>v&&v!=="—") || "—";
   const domainVal= rows.map(r=>String(r[C.domain]||"")).find(v=>v&&v!=="—") || "—";
 
-  // Name cell
+  // Name cell (no expand/collapse)
+  const [copied, setCopied] = React.useState(false);
+  function copyName() {
+    const txt = accountId; // always copy the raw account ID (company key)
+    navigator.clipboard.writeText(txt).then(() => { setCopied(true); setTimeout(()=>setCopied(false), 1500); });
+  }
   const arrowCell = (
-    <td style={{...S.td, paddingLeft:10, whiteSpace:"nowrap", minWidth:160}}>
+    <td style={{...S.td, paddingLeft:10, whiteSpace:"nowrap", minWidth:180}}>
       <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <button
+          onClick={e=>{e.stopPropagation();copyName();}}
+          title="Скопіювати назву акаунту"
+          style={{flexShrink:0,background:"none",border:"none",cursor:"pointer",padding:"2px 3px",color:copied?"var(--green)":"var(--muted)",fontSize:13,lineHeight:1,borderRadius:4,transition:"color .15s"}}
+        >{copied?"✓":"⎘"}</button>
         <EditableCell
           value={lbl.name || ""}
           placeholder={group.displayName}
