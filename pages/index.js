@@ -1294,6 +1294,12 @@ function TrafficDot({ st }) {
       <span style={{fontSize:11,color:"var(--blue)",fontWeight:600}}>Пуск</span>
     </div>
   );
+  if (st === "stopped") return (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <span style={{width:10,height:10,borderRadius:"50%",background:"var(--yellow)",flexShrink:0,boxShadow:"0 0 6px var(--yellow)"}}/>
+      <span style={{fontSize:11,color:"var(--yellow)",fontWeight:600}}>Зупинився</span>
+    </div>
+  );
   return (
     <div style={{display:"flex",alignItems:"center",gap:6}}>
       <span style={{width:10,height:10,borderRadius:"50%",background:"var(--green)",flexShrink:0,boxShadow:"0 0 6px var(--green)"}}/>
