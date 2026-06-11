@@ -498,7 +498,8 @@ export default function Dashboard() {
     })).sort((a,b) => b.spend - a.spend);
   }, [rawRows]);
 
-  const [weekSort, setWeekSort] = useState({ col:"spend", dir:-1 });
+  const [weekSort,    setWeekSort]    = useState({ col:"spend", dir:-1 });
+  const [banSortDir,  setBanSortDir]  = useState(-1); // -1 = newest first, 1 = oldest first
   const weekSorted = useMemo(() => {
     const { col, dir } = weekSort;
     const numCols = ["spend","imp","clicks","conv","ctr","cpc","cpm","cpa","days"];
@@ -697,20 +698,36 @@ export default function Dashboard() {
                 <div>Забанених акаунтів немає</div>
               </div>
             ) : (<>
-              <div style={{marginBottom:16,color:"var(--muted)",fontSize:13}}>
-                Акаунти без оновлень 48+ годин — автоматично перенесено з основної таблиці
+              <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                <span style={{color:"var(--muted)",fontSize:13}}>Акаунти без оновлень 48+ годин — автоматично перенесено з основної таблиці</span>
+                <button
+                  onClick={()=>setBanSortDir(d=>-d)}
+                  style={{background:"var(--bg3)",border:"1px solid var(--border)",color:"var(--muted2)",borderRadius:6,padding:"4px 12px",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}
+                >
+                  📅 Дата бану {banSortDir===-1?"↓ Новіші":"↑ Старіші"}
+                </button>
               </div>
               <div style={S.tableWrap}>
                 <table style={S.table}>
                   <thead>
                     <tr>
-                      {["Акаунт","Останній запис","Домен","Гео","Витрати вчора $","Покази вчора","DL вчора","Місяць $","Коментар"].map(l=>(
+                      {["Акаунт","Дата бану","Останній запис","Домен","Гео","Витрати вчора $","Покази вчора","DL вчора","Місяць $","Коментар"].map(l=>(
                         <th key={l} style={S.th}>{l}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {bannedGroups.map(({company, lastSeen, lastTs, row, isManual})=>{
+                    {[...bannedGroups].sort((a,b)=>{
+                      // Ban date: for manual bans use manualBan date, for auto use lastTs
+                      const getBanTs = ({company, lastTs, isManual}) => {
+                        if (isManual) {
+                          const d = labels[company]?.manualBan;
+                          return d && d !== "1" ? new Date(d).getTime() : lastTs;
+                        }
+                        return lastTs;
+                      };
+                      return banSortDir * (getBanTs(b) - getBanTs(a));
+                    }).map(({company, lastSeen, lastTs, row, isManual})=>{
                       // spendY/impY are only accurate if row is from today or yesterday
                       const rowDateStr = lastTs > 0 ? new Date(lastTs).toISOString().slice(0,10) : "";
                       const isRecentRow = rowDateStr === fmtDate(0) || rowDateStr === fmtDate(-1);
@@ -742,6 +759,20 @@ export default function Dashboard() {
                               style={{background:"rgba(239,68,68,.12)",color:"var(--red)",border:"1px solid rgba(239,68,68,.3)",borderRadius:5,padding:"1px 7px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
                             >🗑 Видалити</button>
                           </div>
+                        </td>
+                        <td style={S.td}>
+                          {(()=>{
+                            let banDate = "—";
+                            if (isManual) {
+                              const d = labels[company]?.manualBan;
+                              banDate = d && d !== "1" ? d : "—";
+                            } else if (lastTs > 0) {
+                              // Auto-ban: approximately when 48h elapsed after lastTs
+                              const approx = new Date(lastTs + 48*60*60*1000);
+                              banDate = approx.toISOString().slice(0,10);
+                            }
+                            return <span style={{color:"var(--red)",fontWeight:600,fontSize:12}}>{banDate}</span>;
+                          })()}
                         </td>
                         <td style={S.td}><span style={{color:"var(--muted)",fontSize:12}}>{lastSeen}</span></td>
                         <td style={S.td}><span style={{color:"var(--blue)",fontWeight:500}}>{row[C.domain]||"—"}</span></td>
