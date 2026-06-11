@@ -434,12 +434,23 @@ export default function Dashboard() {
     }
 
     if (tab === "yesterday") {
-      // Only accounts with spend >= $1 yesterday
-      list = list.filter(g => g.rows.reduce((s, r) => s + n(r[C.spendY]), 0) >= 1);
-      // Add banned accounts with spend >= $1 yesterday
+      const todayStr     = fmtDate(0);
+      const yesterdayStr = fmtDate(-1);
+      // Only accounts with fresh rows (today or yesterday) and spend >= $1
+      list = list.filter(g => {
+        const freshRows = g.rows.filter(r => {
+          const d = String(r[C.date]).slice(0,10);
+          return d === todayStr || d === yesterdayStr;
+        });
+        return freshRows.reduce((s, r) => s + n(r[C.spendY]), 0) >= 1;
+      });
+      // Add banned accounts — only if their latest row is today or yesterday and spendY >= $1
       bannedGroups.forEach(({ company, row }) => {
         if (labels[company]?.deleted === "1") return;
         const rowArr = Array.isArray(row) && row.length > 0 ? row : (row && !Array.isArray(row) ? [row] : []);
+        // Check row date — must be today or yesterday for spendY to be meaningful
+        const rowDate = rowArr.length > 0 ? String(rowArr[0][C.date]).slice(0,10) : "";
+        if (rowDate !== todayStr && rowDate !== yesterdayStr) return;
         const spendY = rowArr.reduce((s, r) => s + n(r[C.spendY]), 0);
         if (spendY < 1) return;
         if (list.find(g => g.name === company)) return;
