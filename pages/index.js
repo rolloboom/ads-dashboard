@@ -500,6 +500,7 @@ export default function Dashboard() {
 
   const [weekSort,    setWeekSort]    = useState({ col:"spend", dir:-1 });
   const [banSortDir,  setBanSortDir]  = useState(-1); // -1 = newest first, 1 = oldest first
+  const [yesterdayBanOnly, setYesterdayBanOnly] = useState(false); // filter yesterday tab to bans only
   const weekSorted = useMemo(() => {
     const { col, dir } = weekSort;
     const numCols = ["spend","imp","clicks","conv","ctr","cpc","cpm","cpa","days"];
@@ -855,6 +856,12 @@ export default function Dashboard() {
             {loading?"Завантаження…":`${tableGroups.reduce((s,g)=>s+g.rows.length,0)} кампаній · ${tableGroups.length} акаунтів`}
           </span>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {tab==="yesterday" && (
+              <button
+                onClick={()=>setYesterdayBanOnly(v=>!v)}
+                style={{background:yesterdayBanOnly?"rgba(239,68,68,.2)":"var(--bg3)",color:yesterdayBanOnly?"var(--red)":"var(--muted2)",border:`1px solid ${yesterdayBanOnly?"rgba(239,68,68,.5)":"var(--border)"}`,borderRadius:6,padding:"4px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}
+              >🚫 Бани {yesterdayBanOnly?"✓":""}</button>
+            )}
             <span style={{color:"var(--muted)",fontSize:11}}>↑↓ клік по заголовку</span>
           </div>
         </div>}
@@ -878,7 +885,15 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {tableGroups.map((g, i) => {
+                {(yesterdayBanOnly && tab==="yesterday"
+                  ? tableGroups.filter(g => {
+                      const lbl = labels[g.name];
+                      const isManuBan = lbl?.manualBan && lbl.manualBan !== "";
+                      const isAutoBan = accountStatus[g.name] === "banned" || g.isBanned;
+                      return isManuBan || isAutoBan;
+                    })
+                  : tableGroups
+                ).map((g, i) => {
                   const prevStopped = i > 0 && tableGroups[i-1].isStopped;
                   const showDivider = tab === "today" && g.isStopped && !prevStopped;
                   return (
@@ -992,6 +1007,14 @@ function AccountGroup({ group, tab, colCount, labels, setLabel, accSt }) {
             ⚠ Перевірити
           </span>
         )}
+        {/* Ban date — shown in yesterday tab for banned accounts */}
+        {(accSt==="banned_report" || group.isBanned) && (()=>{
+          const banVal = lbl?.manualBan;
+          if (banVal && banVal !== "1") {
+            return <span style={{color:"var(--red)",fontSize:10,fontWeight:600,whiteSpace:"nowrap"}}>бан {banVal}</span>;
+          }
+          return null;
+        })()}
       </div>
     </td>
   );
