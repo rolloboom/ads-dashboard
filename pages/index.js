@@ -454,7 +454,18 @@ export default function Dashboard() {
         const spendY = rowArr.reduce((s, r) => s + n(r[C.spendY]), 0);
         if (spendY < 1) return;
         if (list.find(g => g.name === company)) return;
-        list.push({ name: company, displayName: labels[company]?.name || company, rows: rowArr, isBanned: true });
+        // Compute ban date for this banned account
+        const bgEntry = bannedGroups.find(b => b.company === company);
+        let banDate = "";
+        if (bgEntry) {
+          const manualBanVal = labels[company]?.manualBan;
+          if (manualBanVal && manualBanVal !== "1") {
+            banDate = manualBanVal; // manual ban date
+          } else if (bgEntry.lastTs > 0) {
+            banDate = new Date(bgEntry.lastTs + 48*60*60*1000).toISOString().slice(0,10); // auto-ban ≈ lastTs+48h
+          }
+        }
+        list.push({ name: company, displayName: labels[company]?.name || company, rows: rowArr, isBanned: true, banDate });
       });
     }
 
@@ -1007,13 +1018,12 @@ function AccountGroup({ group, tab, colCount, labels, setLabel, accSt }) {
             ⚠ Перевірити
           </span>
         )}
-        {/* Ban date — shown in yesterday tab for banned accounts */}
+        {/* Ban date — shown for banned accounts */}
         {(accSt==="banned_report" || group.isBanned) && (()=>{
-          const banVal = lbl?.manualBan;
-          if (banVal && banVal !== "1") {
-            return <span style={{color:"var(--red)",fontSize:10,fontWeight:600,whiteSpace:"nowrap"}}>бан {banVal}</span>;
-          }
-          return null;
+          // Priority: group.banDate (pre-computed) > manualBan label > —
+          const bd = group.banDate || (lbl?.manualBan && lbl.manualBan !== "1" ? lbl.manualBan : null);
+          if (!bd) return null;
+          return <span style={{color:"var(--red)",fontSize:10,fontWeight:600,whiteSpace:"nowrap",background:"rgba(239,68,68,.12)",padding:"1px 6px",borderRadius:20}}>бан {bd}</span>;
         })()}
       </div>
     </td>
